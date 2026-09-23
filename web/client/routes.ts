@@ -10,8 +10,9 @@
  *
  * - **Pages and their forms** — a signed-in person, identified by the session cookie.
  * - **`auth`** — turning an id.kbn.one sign-in into that cookie, and back out.
- * - **`api`** — scripts. Addressed by the user's API token instead of a cookie, which is what
- *   makes them usable from `curl`: `POST /api/u/:token/inbox` adds a task.
+ * - **`api`** — scripts. Authorized by the user's API token in an `Authorization: Bearer` header
+ *   instead of a cookie, which is what makes them usable from `curl`: `POST /api/inbox` adds a
+ *   task.
  */
 
 import { del, get, patch, post, route } from "@remix-run/fetch-router/routes";
@@ -34,7 +35,7 @@ export const routes = route("", {
     session: post("/session"),
     logout: post("/logout"),
   }),
-  api: route("api/u/:token", {
+  api: route("api", {
     create: post("/:list"),
     update: patch("/tasks/:taskId"),
     deleteLog: del("/tasks/:taskId/logs/:logId"),

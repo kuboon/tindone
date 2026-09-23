@@ -19,15 +19,17 @@ import { SignOut } from "../islands/sign_out.tsx";
 export interface HomeProps {
   counts: Record<ListName, number>;
   tasks: ExportTask[];
-  /** `POST` here (with the API token in it) adds a task to the inbox. */
+  /** `POST` here adds a task to the inbox. */
   quickApiUrl: string;
+  /** Sent as `Authorization: Bearer …` by scripts calling the API. */
+  apiToken: string;
   idpOrigin: string;
 }
 
 /** `/` for a signed-in user: add a task, pick a deck, and the API. */
 export function Home(handle: Handle<HomeProps>) {
   return () => {
-    const { counts, tasks, quickApiUrl, idpOrigin } = handle.props;
+    const { counts, tasks, quickApiUrl, apiToken, idpOrigin } = handle.props;
     return (
       <main mix={pageStyle}>
         <header mix={headerStyle}>
@@ -83,7 +85,7 @@ export function Home(handle: Handle<HomeProps>) {
         </div>
 
         <section mix={apiStyle}>
-          <ApiInst apiUrl={quickApiUrl} mode="create" />
+          <ApiInst apiUrl={quickApiUrl} token={apiToken} mode="create" />
         </section>
 
         <ExportButtons tasks={tasks} />
@@ -95,9 +97,9 @@ export function Home(handle: Handle<HomeProps>) {
           <details mix={tokenStyle}>
             <summary>API token</summary>
             <p>
-              The API URLs above work without signing in, so anyone holding one
-              can add and move your tasks. Regenerating the token stops every
-              old URL.
+              The API works without signing in, so anyone holding this token can
+              add and move your tasks. Regenerating it stops every script using
+              the old one.
             </p>
             <form method="post" action={routes.rotateToken.href()}>
               <button type="submit" mix={dangerStyle}>Regenerate token</button>

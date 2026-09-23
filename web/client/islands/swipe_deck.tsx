@@ -151,10 +151,13 @@ export const SwipeDeck = clientEntry(
       if (!task) return;
       const target = direction === "up" ? "done" : TARGETS[list()]![direction];
       fetch(
-        routes.api.update.href({ token: handle.props.token, taskId: task.id }),
+        routes.api.update.href({ taskId: task.id }),
         {
           method: "PATCH",
-          headers: { "content-type": "application/json" },
+          headers: {
+            authorization: `Bearer ${handle.props.token}`,
+            "content-type": "application/json",
+          },
           body: JSON.stringify({ list: target, push: false }),
         },
       ).catch((error) => console.error(error));

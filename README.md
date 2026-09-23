@@ -79,18 +79,22 @@ hosts.
 
 ## API
 
-Every user has an API token. The API is addressed by it, so scripts need no sign-in. The URLs are
-shown on the home and task pages (and the token can be regenerated from the home page).
+Every user has an API token, sent as `Authorization: Bearer <token>`, so scripts need no sign-in.
+The token and ready-to-copy snippets are shown on the home and task pages, and the token can be
+regenerated from the home page.
 
-- `POST /api/u/:token/:list` — add a task (`list`: `inbox` / `now` / `next` / `waiting`). Body is
-  the text itself (`text/plain`) or `{ "content": "…" }` (JSON). Content is 1–100 chars.
-- `PATCH /api/u/:token/tasks/:taskId` — `{ "list": "done" }` and/or `{ "content": "…" }`.
+- `POST /api/:list` — add a task (`list`: `inbox` / `now` / `next` / `waiting`). Body is the text
+  itself (`text/plain`) or `{ "content": "…" }` (JSON). Content is 1–100 chars.
+- `PATCH /api/tasks/:taskId` — `{ "list": "done" }` and/or `{ "content": "…" }`.
   - `push` (default `true`): send a push notification for a move. `{ "list": "now", "push": false }`
     skips it; the app's own screens always do.
-- `DELETE /api/u/:token/tasks/:taskId/logs/:logId` — delete one history line.
+- `DELETE /api/tasks/:taskId/logs/:logId` — delete one history line.
+
+A missing or unknown token is a `401`.
 
 ```sh
-curl -X POST https://gtd.kbn.one/api/u/<token>/inbox -H "Content-Type: text/plain" -d 'buy milk'
+curl -X POST https://gtd.kbn.one/api/inbox -H "Authorization: Bearer <token>" \
+  -H "Content-Type: text/plain" -d 'buy milk'
 ```
 
 ## Push notifications

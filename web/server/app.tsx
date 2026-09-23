@@ -13,9 +13,8 @@
  *
  * - **Pages and their forms** read the session cookie (`auth.ts`). A form posts, the action does
  *   the work, and the answer is a `303` back to a page.
- * - **`/api/u/:token/…`** is for scripts, and the API token in the URL is the credential — the same
- *   endpoints the old app had, with the token where the user id used to be. The swipe deck uses
- *   them too, so a swipe and a `curl` are one code path.
+ * - **`/api/…`** is for scripts, authorized by the user's API token as `Authorization: Bearer
+ *   <token>`. The swipe deck uses the same endpoints, so a swipe and a `curl` are one code path.
  *
  * What differs between hosts is only how the client bundle is found ({@link Scripts}): `router.tsx`
  * compiles it on startup for `deno serve`, and `worker.ts` reads the manifest `build.ts` wrote.
@@ -152,7 +151,7 @@ function formError(error: unknown): Response {
 const CORS = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "POST, PATCH, DELETE, OPTIONS",
-  "access-control-allow-headers": "content-type",
+  "access-control-allow-headers": "authorization, content-type",
 };
 
 // --- pages ----------------------------------------------------------------------
@@ -183,8 +182,9 @@ const pages = createController(routes, {
           }))}
           quickApiUrl={absolute(
             context,
-            routes.api.create.href({ token: user.apiToken, list: "inbox" }),
+            routes.api.create.href({ list: "inbox" }),
           )}
+          apiToken={user.apiToken}
           idpOrigin={config().idpOrigin}
         />,
       );
@@ -282,14 +282,14 @@ const taskController = createController(routes.tasks, {
             to_list,
             created_at,
           }))}
-          apiUrl={owner
-            ? absolute(
-              context,
-              routes.api.update.href({
-                token: owner.apiToken,
-                taskId: task.id,
-              }),
-            )
+          api={owner
+            ? {
+              url: absolute(
+                context,
+                routes.api.update.href({ taskId: task.id }),
+              ),
+              token: owner.apiToken,
+            }
             : null}
         />,
       );
@@ -363,13 +363,31 @@ const authController = createController(routes.auth, {
   },
 });
 
-// --- api: for scripts, addressed by token ----------------------------------------
+// --- api: for scripts, authorized by a bearer token --------------------------------
+
+/**
+ * The user an API request is authorized as, from `Authorization: Bearer <token>`.
+ *
+ * @returns The user, or the `401` to answer with
+ */
+async function apiUser(context: AppContext): Promise<User | Response> {
+  const [scheme, token] = (context.request.headers.get("authorization") ?? "")
+    .split(" ");
+  const user = scheme?.toLowerCase() === "bearer" && token
+    ? await userByToken(token)
+    : null;
+  if (user) return user;
+  return Response.json({ error: "A valid API token is required" }, {
+    status: 401,
+    headers: { ...CORS, "www-authenticate": "Bearer" },
+  });
+}
 
 const apiController = createController(routes.api, {
   actions: {
     async create(context) {
-      const user = await userByToken(context.params.token);
-      if (!user) return apiError(new TaskError("Unknown API token", 404));
+      const user = await apiUser(context);
+      if (user instanceof Response) return user;
       const { list } = context.params;
       if (!isOpenList(list)) return apiError(new TaskError("Invalid list"));
       try {
@@ -386,8 +404,8 @@ const apiController = createController(routes.api, {
     },
 
     async update(context) {
-      const user = await userByToken(context.params.token);
-      if (!user) return apiError(new TaskError("Unknown API token", 404));
+      const user = await apiUser(context);
+      if (user instanceof Response) return user;
       const { taskId } = context.params;
       try {
         const body = await context.request.json().catch(() => null) as
@@ -417,8 +435,8 @@ const apiController = createController(routes.api, {
     },
 
     async deleteLog(context) {
-      const user = await userByToken(context.params.token);
-      if (!user) return apiError(new TaskError("Unknown API token", 404));
+      const user = await apiUser(context);
+      if (user instanceof Response) return user;
       try {
         await deleteLog(user.id, context.params.taskId, context.params.logId);
         return Response.json({ success: true }, { headers: CORS });

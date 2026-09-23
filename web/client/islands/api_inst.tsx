@@ -12,8 +12,10 @@ const TABS = ["curl", "wget", "fetch"] as const;
 type Tab = (typeof TABS)[number];
 
 export interface ApiInstProps {
-  /** Absolute endpoint URL, API token included. */
+  /** Absolute endpoint URL. */
   apiUrl: string;
+  /** The user's API token, sent as `Authorization: Bearer …`. */
+  token: string;
   /** `create`: add a task to a list. `update`: move the task this page shows. */
   mode: "create" | "update";
   [key: string]: SerializableValue;
@@ -22,7 +24,8 @@ export interface ApiInstProps {
 /**
  * The same API call three ways — curl, wget and `fetch` — with a copy button.
  *
- * The URL carries the user's API token, which is what lets a script call it without signing in.
+ * The user's API token goes in an `Authorization: Bearer` header, which is what lets a script call
+ * it without signing in.
  */
 export const ApiInst = clientEntry(
   "file://client/islands/api_inst.tsx#ApiInst",
@@ -31,28 +34,35 @@ export const ApiInst = clientEntry(
     let copied = false;
 
     const snippet = (): string => {
-      const url = handle.props.apiUrl;
+      const { apiUrl: url, token } = handle.props;
+      const auth = `Authorization: Bearer ${token}`;
       if (handle.props.mode === "create") {
         return {
           curl:
-            `curl -X POST ${url} -H "Content-Type: text/plain" -d 'buy milk'`,
+            `curl -X POST ${url} -H "${auth}" -H "Content-Type: text/plain" -d 'buy milk'`,
           wget:
-            `wget --method=POST --body-data='buy milk' --header="Content-Type: text/plain" ${url}`,
+            `wget --method=POST --body-data='buy milk' --header="${auth}" --header="Content-Type: text/plain" ${url}`,
           fetch: `await fetch("${url}", {
   method: "POST",
-  headers: { "Content-Type": "text/plain" },
+  headers: {
+    "Authorization": "Bearer ${token}",
+    "Content-Type": "text/plain",
+  },
   body: "buy milk",
 });`,
         }[tab];
       }
       return {
         curl:
-          `curl -X PATCH ${url} -H "Content-Type: application/json" -d '{"list":"done"}'`,
+          `curl -X PATCH ${url} -H "${auth}" -H "Content-Type: application/json" -d '{"list":"done"}'`,
         wget:
-          `wget --method=PATCH --body-data='{"list":"done"}' --header="Content-Type: application/json" ${url}`,
+          `wget --method=PATCH --body-data='{"list":"done"}' --header="${auth}" --header="Content-Type: application/json" ${url}`,
         fetch: `await fetch("${url}", {
   method: "PATCH",
-  headers: { "Content-Type": "application/json" },
+  headers: {
+    "Authorization": "Bearer ${token}",
+    "Content-Type": "application/json",
+  },
   body: JSON.stringify({ list: "done" }),
 });`,
       }[tab];
