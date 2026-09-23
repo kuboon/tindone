@@ -5,7 +5,6 @@
     "start": "deno task --cwd server start",
     "build": "deno task --cwd server build",
     "db": "deno run -A jsr:@remix-kbn/data-table-sqlite-turso@^0.5.0/cli",
-    "init-secrets": "deno run --allow-run=npx --allow-env server/init_secrets.ts",
     "check": "deno task --members check && deno lint && deno fmt --check",
     "test": "deno task --cwd server test"
   },
