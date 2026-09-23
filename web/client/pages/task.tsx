@@ -31,17 +31,17 @@ export interface TaskPageProps {
   task: TaskView;
   logs: LogView[];
   /**
-   * The API URL for this task, when the viewer owns it. A task page can be opened by anyone with its
-   * link, but only the owner gets the controls.
+   * The API URL for this task and the token to call it with, when the viewer owns it. A task page
+   * can be opened by anyone with its link, but only the owner gets the controls.
    */
-  apiUrl: string | null;
+  api: { url: string; token: string } | null;
 }
 
 /** `/tasks/:taskId` — edit, move, and the history of one task. */
 export function TaskPage(handle: Handle<TaskPageProps>) {
   return () => {
-    const { task, logs, apiUrl } = handle.props;
-    const owner = apiUrl !== null;
+    const { task, logs, api } = handle.props;
+    const owner = api !== null;
     const update = routes.tasks.update.href({ taskId: task.id });
     const back = task.list === "done"
       ? routes.done.href()
@@ -128,7 +128,9 @@ export function TaskPage(handle: Handle<TaskPageProps>) {
           </div>
         </section>
 
-        {apiUrl ? <ApiInst apiUrl={apiUrl} mode="update" /> : null}
+        {api
+          ? <ApiInst apiUrl={api.url} token={api.token} mode="update" />
+          : null}
       </main>
     );
   };
