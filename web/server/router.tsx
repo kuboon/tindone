@@ -9,6 +9,7 @@
 
 import { createApp } from "./app.tsx";
 import { compileClient } from "./compile.ts";
+import { loadDocs } from "./docs.ts";
 import { entryPath, RUNTIME_ENTRY } from "./scripts.ts";
 
 const assets = await compileClient();
@@ -17,4 +18,7 @@ const runtime = await assets.getScriptEntry(RUNTIME_ENTRY);
 export default createApp({
   getScriptEntry: (id) => assets.getScriptEntry(entryPath(id)),
   runtime: { src: runtime.href, preloads: runtime.preloads },
-}, (request) => assets.fetch(request));
+}, {
+  docs: await loadDocs(),
+  serveAssets: (request) => assets.fetch(request),
+});

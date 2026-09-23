@@ -10,22 +10,23 @@
  * Static Assets, served before the Worker is asked.
  */
 
-import { createApp } from "./app.tsx";
+import { createApp, type Docs } from "./app.tsx";
 import { setEnv } from "./config.ts";
 import { type ScriptManifest, scriptsFromManifest } from "./scripts.ts";
 
 /**
  * @param manifest The client build's entry map
+ * @param docs `docs/`, converted at build time
  * @returns The Worker's handler
  */
-export default function createWorker(manifest: ScriptManifest) {
+export default function createWorker(manifest: ScriptManifest, docs: Docs) {
   let app: ReturnType<typeof createApp> | undefined;
 
   return {
     fetch(request: Request, env: Record<string, unknown>): Promise<Response> {
       if (!app) {
         setEnv(env);
-        app = createApp(scriptsFromManifest(manifest));
+        app = createApp(scriptsFromManifest(manifest), { docs });
       }
       return app.fetch(request);
     },

@@ -29,6 +29,7 @@ import {
 } from "@remix-run/fetch-router";
 import { render } from "@remix-run/render-middleware";
 import type { RemixNode } from "@remix-run/ui";
+import { hastToRemix } from "@kuboon/md/hast_to_remix.ts";
 
 import {
   currentUser,
@@ -62,6 +63,7 @@ import { APP_NAME, Layout, TAGLINE } from "../client/layout.tsx";
 import { SWIPE_LISTS } from "../client/lists.ts";
 import { routes } from "../client/routes.ts";
 import { Callback } from "../client/pages/callback.tsx";
+import { Doc as DocPage } from "../client/pages/doc.tsx";
 import { Done } from "../client/pages/done.tsx";
 import { Home } from "../client/pages/home.tsx";
 import { Landing } from "../client/pages/landing.tsx";
@@ -81,6 +83,18 @@ declare module "@remix-run/fetch-router" {
 }
 
 // --- helpers ------------------------------------------------------------------
+
+/** A Markdown document from `docs/`, converted ahead of time by `docs.ts`. */
+export interface Doc {
+  title: string;
+  hast: Parameters<typeof hastToRemix>[0] & { type: "root" };
+}
+
+/** Every document, by slug: `docs/api.md` is `api`, served at `/docs/api`. */
+export type Docs = Record<string, Doc>;
+
+/** Set by {@link createApp}. */
+let docs: Docs = {};
 
 /** Set by {@link createApp}: the runtime a hydrating page loads. */
 let clientRuntime: Scripts["runtime"];
@@ -233,6 +247,20 @@ const pages = createController(routes, {
       if (user instanceof Response) return user;
       await rotateApiToken(user.id);
       return redirect(routes.home.href());
+    },
+
+    doc(context) {
+      const doc = Object.hasOwn(docs, context.params.slug)
+        ? docs[context.params.slug]
+        : undefined;
+      if (!doc) return notFound();
+      const response = context.render(
+        <Layout title={`${doc.title} — ${APP_NAME}`} script={null}>
+          <DocPage>{hastToRemix(doc.hast)}</DocPage>
+        </Layout>,
+      );
+      response.headers.set("cache-control", "public, max-age=300");
+      return response;
     },
 
     jwks: () => jwks(),
@@ -451,14 +479,20 @@ const apiController = createController(routes.api, {
  * Builds the app.
  *
  * @param scripts Where the client bundle is, on this host
- * @param serveAssets Serves `/assets/*` — in development, where nothing else does
+ * @param options.docs The converted `docs/` (`docs.ts`), served at `/docs/:slug`
+ * @param options.serveAssets Serves `/assets/*` — in development, where nothing else does
  * @returns A router; its `fetch` is the whole server
  */
 export function createApp(
   scripts: Scripts,
-  serveAssets?: (request: Request) => Promise<Response | null>,
+  options: {
+    docs?: Docs;
+    serveAssets?: (request: Request) => Promise<Response | null>;
+  } = {},
 ) {
+  const { serveAssets } = options;
   clientRuntime = scripts.runtime;
+  docs = options.docs ?? {};
   const router = makeRouter(scripts);
   router.map(routes, pages);
   router.map(routes.tasks, taskController);

@@ -28,6 +28,8 @@ export const routes = route("", {
     deleteLog: post("/:taskId/logs/:logId/delete"),
   }),
   rotateToken: post("/settings/api-token"),
+  /** `docs/<slug>.md`, rendered — `/docs/api` is the API reference. */
+  doc: get("/docs/:slug"),
   auth: route("auth", {
     /** Where id.kbn.one sends the browser back to after `/authorize`. */
     callback: get("/callback"),
