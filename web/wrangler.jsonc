@@ -14,10 +14,11 @@
   },
   // Secrets, set with `wrangler secret put <NAME>`:
   //   SESSION_SECRET, RP_SIGNING_KEY_JWK, TURSO_DATABASE_URL, TURSO_AUTH_TOKEN
-  // RP_ORIGIN is this Worker's public origin — set it here once the domain is known (and add it to
-  // id.kbn.one's AUTHORIZE_WHITELIST).
+  // RP_ORIGIN is this Worker's public origin: the clientId id.kbn.one knows it by (it has to be on
+  // the IdP's AUTHORIZE_WHITELIST), and the base of the absolute URLs the app hands out.
   "vars": {
-    "IDP_ORIGIN": "https://id.kbn.one"
+    "IDP_ORIGIN": "https://id.kbn.one",
+    "RP_ORIGIN": "https://gtd.kbn.one"
   },
   "observability": { "enabled": true }
 }

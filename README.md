@@ -90,7 +90,7 @@ shown on the home and task pages (and the token can be regenerated from the home
 - `DELETE /api/u/:token/tasks/:taskId/logs/:logId` — delete one history line.
 
 ```sh
-curl -X POST https://tindone.example/api/u/<token>/inbox -H "Content-Type: text/plain" -d 'buy milk'
+curl -X POST https://gtd.kbn.one/api/u/<token>/inbox -H "Content-Type: text/plain" -d 'buy milk'
 ```
 
 ## Push notifications
