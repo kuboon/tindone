@@ -43,7 +43,6 @@ import {
 import { config, publicOrigin } from "./config.ts";
 import type { Scripts } from "./scripts.ts";
 import { isListName } from "./db.ts";
-import { taskImage } from "./og.ts";
 import { jwks } from "./push.ts";
 import { notFound, serveStatic } from "./static.ts";
 import {
@@ -90,7 +89,6 @@ let clientRuntime: Scripts["runtime"];
 interface PageOptions {
   title: string;
   description?: string;
-  image?: string | null;
   /** Whether the page places an island, so the shell loads the client runtime. */
   hydrate: boolean;
 }
@@ -105,7 +103,6 @@ function page(
     <Layout
       title={options.title}
       description={options.description}
-      image={options.image ?? null}
       script={options.hydrate ? clientRuntime : null}
     >
       {body}
@@ -275,10 +272,6 @@ const taskController = createController(routes.tasks, {
         {
           title: `${task.content} | ${APP_NAME}`,
           description: `List: ${task.list.toUpperCase()}`,
-          image: absolute(
-            context,
-            routes.tasks.image.href({ taskId: task.id }),
-          ),
           hydrate: owner !== null,
         },
         <TaskPage
@@ -331,12 +324,6 @@ const taskController = createController(routes.tasks, {
         return formError(error);
       }
       return redirect(routes.tasks.show.href({ taskId }));
-    },
-
-    async image(context) {
-      const task = await findTask(context.params.taskId);
-      if (!task) return notFound();
-      return await taskImage(task, new URL(publicOrigin(context.request)).host);
     },
   },
 });

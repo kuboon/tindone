@@ -32,7 +32,7 @@ export interface TaskPageProps {
   logs: LogView[];
   /**
    * The API URL for this task, when the viewer owns it. A task page can be opened by anyone with its
-   * link — that is what its social card is for — but only the owner gets the controls.
+   * link, but only the owner gets the controls.
    */
   apiUrl: string | null;
 }

@@ -14,7 +14,6 @@ Swipe your way to GTD nirvana.
 - **Push notifications**: delivered by id.kbn.one
 - **Database**: Turso (libSQL) via `@remix-run/data-table` +
   [`@remix-kbn/data-table-sqlite-turso`](https://jsr.io/@remix-kbn/data-table-sqlite-turso)
-- **Social cards**: drawn with resvg (`@resvg/resvg-wasm`)
 
 ## Features
 
@@ -26,7 +25,6 @@ Swipe your way to GTD nirvana.
 - **Remote Update**: copy a curl / wget / `fetch` snippet to add or move tasks from a terminal.
 - **Push Notifications**: a move made through the API notifies your devices.
 - **Export**: copy every task as Markdown or JSON.
-- **Dynamic OG Image**: task URLs are shareable with a preview card.
 
 ## Layout
 
@@ -43,8 +41,8 @@ web/
     pages/           # server-rendered screens
     islands/         # hydrated client components (each file is an entrypoint)
       _lib/session.ts  # the browser's DPoP key + id.kbn.one session, shared by islands
-    static/          # app.css, icons, fonts, sw.js, manifest
-  server/            # auth, database, push, OG images
+    static/          # app.css, icons, sw.js, manifest
+  server/            # auth, database, push
     app.tsx          # routes → controllers, the same on both hosts
     router.tsx       # development entry: `deno serve router.tsx`, compiles client/ on startup
     worker.ts        # Cloudflare Workers entry
@@ -61,7 +59,6 @@ things that are not code:
 | Environment       | `Deno.env`                               | the Worker's `env` (`wrangler.jsonc` vars + secrets)       |
 | Client bundle     | compiled on startup (`Deno.bundle`)      | prebuilt into `dist/public/assets/` + `dist/manifest.json` |
 | Static files      | served by the router                     | Workers Static Assets (`dist/public/`)                     |
-| OG card resources | read from disk                           | wasm imported as a module, fonts via the `ASSETS` binding  |
 | Database          | `web/data/app.db` (or `TURSO_*`)         | Turso over HTTP (`@libsql/client/web`)                     |
 
 Islands name themselves `file://client/islands/<name>.tsx#<Export>` in `clientEntry()` rather than
@@ -168,4 +165,4 @@ One-time setup:
    (`https://tindone.<subdomain>.workers.dev` or a custom domain), and add the same origin to
    id.kbn.one's `AUTHORIZE_WHITELIST`.
 
-The Worker is about 1 MB gzipped (resvg's WebAssembly is most of it), within the free plan's 3 MB.
+The Worker is about 100 KB gzipped, well within the free plan's 3 MB.

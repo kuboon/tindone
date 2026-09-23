@@ -6,9 +6,8 @@
  * frame navigation and only swaps the document when it finds the `rmx:flush document` marker that
  * `renderToString` would strip.
  *
- * What the shell cannot work out for itself is handed to it as props: where the client runtime was
- * compiled to (`script`, `null` for a page with no islands), and the absolute URL of the page's
- * social card.
+ * What the shell cannot work out for itself is handed to it as a prop: where the client runtime was
+ * compiled to (`script`, `null` for a page with no islands).
  *
  * `static/app.css` is linked first in `<head>` on purpose: it names the cascade layer order, and
  * layers rank by where they are first named — Remix appends its collected styles just before
@@ -28,8 +27,6 @@ export interface ClientRuntime {
 export interface LayoutProps {
   title: string;
   description?: string;
-  /** Absolute URL of the page's `og:image`, or `null` for a page without one. */
-  image: string | null;
   /**
    * The client runtime, for a page that places an island. Required, and `null` for a page with
    * none: an omitted script looks exactly like a page that needs none, and its islands would render
@@ -78,21 +75,6 @@ export function Layout(handle: Handle<LayoutProps>) {
             rel="apple-touch-icon"
             href={routes.static.href({ path: "icon-192.png" })}
           />
-          <meta property="og:type" content="website" />
-          <meta property="og:site_name" content={APP_NAME} />
-          <meta property="og:title" content={props.title} />
-          <meta
-            property="og:description"
-            content={props.description ?? TAGLINE}
-          />
-          {props.image
-            ? (
-              <>
-                <meta property="og:image" content={props.image} />
-                <meta name="twitter:card" content="summary_large_image" />
-              </>
-            )
-            : null}
           {(props.script?.preloads ?? []).map((href) => (
             <link key={href} rel="modulepreload" href={href} />
           ))}

@@ -25,8 +25,6 @@ export const routes = route("", {
     show: get("/:taskId"),
     update: post("/:taskId"),
     deleteLog: post("/:taskId/logs/:logId/delete"),
-    /** The task's social card. */
-    image: get("/:taskId/og.png"),
   }),
   rotateToken: post("/settings/api-token"),
   auth: route("auth", {

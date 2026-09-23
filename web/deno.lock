@@ -19,7 +19,6 @@
     "npm:@remix-run/fetch-router@~0.22.1": "0.22.1",
     "npm:@remix-run/render-middleware@~0.3.1": "0.3.1_@emnapi+core@1.11.2_@emnapi+runtime@1.11.2",
     "npm:@remix-run/ui@0.10": "0.10.0",
-    "npm:@resvg/resvg-wasm@^2.6.2": "2.6.2",
     "npm:cjs-module-lexer@^2.2.1": "2.2.1",
     "npm:es-module-lexer@^2.3.2": "2.3.2"
   },
@@ -691,9 +690,6 @@
         "@types/dom-navigation"
       ]
     },
-    "@resvg/resvg-wasm@2.6.2": {
-      "integrity": "sha512-FqALmHI8D4o6lk/LRWDnhw95z5eO+eAa6ORjVg09YRR7BkcM6oPHU9uyC0gtQG5vpFLvgpeU4+zEAz2H8APHNw=="
-    },
     "@tybys/wasm-util@0.10.4": {
       "integrity": "sha512-W3c4gRigFS0T/Ma4qIYF3GDAc5AQdHb1yL5znJT1Zv1YaD9Kitx656wBjvr19qbiosmZT8lWDM5BEMynUqX65A==",
       "dependencies": [
@@ -982,8 +978,7 @@
       "npm:@remix-run/data-table@0.6",
       "npm:@remix-run/fetch-router@~0.22.1",
       "npm:@remix-run/render-middleware@~0.3.1",
-      "npm:@remix-run/ui@0.10",
-      "npm:@resvg/resvg-wasm@^2.6.2"
+      "npm:@remix-run/ui@0.10"
     ]
   }
 }

@@ -2,7 +2,7 @@
  * The files under `client/static/`, served verbatim — in development.
  *
  * On Workers these URLs are Static Assets, answered before the Worker runs, so this only ever reads
- * files under `deno serve`. A handful of files — the stylesheet, the icons, the fonts, the service
+ * files under `deno serve`. A handful of files — the stylesheet, the icons, the service
  * worker — so this is a lookup rather than a file server: a path that names anything outside the
  * directory, or a type not listed here, is a 404.
  */
@@ -13,7 +13,6 @@ const TYPES: Record<string, string> = {
   svg: "image/svg+xml",
   png: "image/png",
   webmanifest: "application/manifest+json",
-  ttf: "font/ttf",
 };
 
 /**

@@ -9,20 +9,7 @@
 
 import { createApp } from "./app.tsx";
 import { compileClient } from "./compile.ts";
-import { setOgResources } from "./og.ts";
 import { entryPath, RUNTIME_ENTRY } from "./scripts.ts";
-
-setOgResources({
-  wasm: () =>
-    Deno.readFile(
-      new URL(
-        "../node_modules/@resvg/resvg-wasm/index_bg.wasm",
-        import.meta.url,
-      ),
-    ),
-  font: (name) =>
-    Deno.readFile(new URL(`../client/static/fonts/${name}`, import.meta.url)),
-});
 
 const assets = await compileClient();
 const runtime = await assets.getScriptEntry(RUNTIME_ENTRY);

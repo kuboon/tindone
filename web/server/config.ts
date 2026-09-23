@@ -14,7 +14,7 @@ export interface Config {
   /**
    * This app's public origin. It is the `clientId` the IdP knows this app by (it has to be on the
    * IdP's `AUTHORIZE_WHITELIST`), the origin the IdP fetches `/.well-known/jwks.json` from, and the
-   * base of every absolute URL the app hands out — API examples, `og:image`, notification links.
+   * base of every absolute URL the app hands out — API examples and notification links.
    * Empty means "whatever origin the request came in on", which is right for local development.
    */
   readonly rpOrigin: string;
