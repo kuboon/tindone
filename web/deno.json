@@ -1,0 +1,39 @@
+{
+  "workspace": ["./client", "./server"],
+  "tasks": {
+    "dev": "deno task --cwd server dev",
+    "start": "deno task --cwd server start",
+    "build": "deno task --cwd server build",
+    "db": "deno run -A jsr:@remix-kbn/data-table-sqlite-turso@^0.5.0/cli",
+    "check": "deno task --members check && deno lint && deno fmt --check",
+    "test": "deno task --cwd server test"
+  },
+  "nodeModulesDir": "auto",
+  "unstable": ["bundle"],
+  "minimumDependencyAge": {
+    "age": "P1D",
+    "exclude": ["jsr:@kuboon/*", "jsr:@remix-kbn/*", "npm:@remix-run/*"]
+  },
+  "imports": {
+    "@remix-run/fetch-router": "npm:@remix-run/fetch-router@^0.22.1",
+    "@remix-run/render-middleware": "npm:@remix-run/render-middleware@^0.3.1",
+    "@remix-run/ui": "npm:@remix-run/ui@^0.10.0",
+    "@remix-run/data-table": "npm:@remix-run/data-table@^0.6.0",
+    "@remix-run/cookie": "npm:@remix-run/cookie@^0.7.0",
+    "@remix-kbn/assets-deno": "jsr:@remix-kbn/assets-deno@^0.8.0",
+    "@remix-kbn/data-table-sqlite-turso": "jsr:@remix-kbn/data-table-sqlite-turso@^0.5.0",
+    "@kuboon/dpop": "jsr:@kuboon/dpop@^0.2.0",
+    "@kuboon/browser-how-to": "jsr:@kuboon/browser-how-to@^0.1.0",
+    "@libsql/client": "npm:@libsql/client@^0.17.4",
+    "@std/assert": "jsr:@std/assert@^1.0.19",
+    "jose": "jsr:@panva/jose@^6.2.3",
+    "canvaskit-wasm": "npm:canvaskit-wasm@^0.40.0"
+  },
+  "fmt": {
+    "exclude": ["node_modules", "data"],
+    "proseWrap": "preserve"
+  },
+  "lint": {
+    "exclude": ["node_modules", "data"]
+  }
+}

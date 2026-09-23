@@ -1,5 +1,0 @@
-{
-  "editor.defaultFormatter": "biomejs.biome",
-  "biome.requireConfiguration": true,
-  "biome.lsp.bin": "node_modules/.bin/biome"
-}

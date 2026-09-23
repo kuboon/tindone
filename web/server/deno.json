@@ -1,0 +1,34 @@
+{
+  "tasks": {
+    "dev": "deno serve -P=serve --watch --port 8000 router.tsx",
+    "start": "deno serve -P=serve router.tsx",
+    "build": "deno install --entrypoint router.tsx && deno run -P=serve assets.ts",
+    "check": "deno check .",
+    "test": "deno test -P=test"
+  },
+  "permissions": {
+    "serve": {
+      "read": true,
+      "write": ["../data"],
+      "env": true,
+      "net": true,
+      "sys": true,
+      "ffi": true,
+      "import": true
+    },
+    "test": {
+      "read": true,
+      "write": true,
+      "env": true,
+      "net": true,
+      "sys": true,
+      "ffi": true,
+      "import": true
+    }
+  },
+  "compilerOptions": {
+    "lib": ["deno.ns", "dom", "dom.iterable", "esnext"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "@remix-run/ui"
+  }
+}
