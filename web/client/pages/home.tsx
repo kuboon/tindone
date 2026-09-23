@@ -42,7 +42,17 @@ export function Home(handle: Handle<HomeProps>) {
           action={routes.tasks.create.href()}
           mix={[inlineFormStyle, addFormStyle]}
         >
+          {
+            /*
+              Keyed by the task count: after a task is added the page comes back through a frame
+              navigation, which diffs the new HTML into the live DOM and keeps an input it can
+              match — with what was typed still in it. The frame diff matches on `data-rmx-key`
+              (a JSX `key` is not in server-rendered HTML), so a new count is a new element and
+              the field starts empty again.
+            */
+          }
           <input
+            data-rmx-key={`add-${tasks.length}`}
             type="text"
             name="content"
             maxLength={100}
