@@ -18,28 +18,36 @@
  * reads. Pages are ordinary document requests, and a document request cannot carry a DPoP proof.
  */
 
-import { createCookie } from "@remix-run/cookie";
+import { type Cookie, createCookie } from "@remix-run/cookie";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { verifyDpopProofFromRequest } from "@kuboon/dpop/server.ts";
 import { computeThumbprint } from "@kuboon/dpop/common.ts";
 
 import { config } from "./config.ts";
-import { db, now, users } from "./db.ts";
+import { getDb, now, users } from "./db.ts";
 import { newId } from "./ids.ts";
 
 const SESSION_MAX_AGE = 60 * 60 * 24 * 30;
 
-const sessionCookie = createCookie("tindone_session", {
-  httpOnly: true,
-  sameSite: "Lax",
-  path: "/",
-  maxAge: SESSION_MAX_AGE,
-  secrets: [...config.sessionSecrets],
-});
+/** Built on first use: the secrets and the IdP come from the environment. */
+let sessionCookie: Cookie | undefined;
+let idpKeys: ReturnType<typeof createRemoteJWKSet> | undefined;
 
-const idpKeys = createRemoteJWKSet(
-  new URL("/.well-known/jwks.json", config.idpOrigin),
-);
+function cookie(): Cookie {
+  return sessionCookie ??= createCookie("tindone_session", {
+    httpOnly: true,
+    sameSite: "Lax",
+    path: "/",
+    maxAge: SESSION_MAX_AGE,
+    secrets: [...config().sessionSecrets],
+  });
+}
+
+function keys(): ReturnType<typeof createRemoteJWKSet> {
+  return idpKeys ??= createRemoteJWKSet(
+    new URL("/.well-known/jwks.json", config().idpOrigin),
+  );
+}
 
 /** A user as the rest of the server sees one. */
 export interface User {
@@ -55,7 +63,7 @@ export interface User {
  */
 export async function sessionUserId(request: Request): Promise<string | null> {
   try {
-    return await sessionCookie.parse(request.headers.get("cookie"));
+    return await cookie().parse(request.headers.get("cookie"));
   } catch {
     return null;
   }
@@ -70,7 +78,7 @@ export async function sessionUserId(request: Request): Promise<string | null> {
 export async function currentUser(request: Request): Promise<User | null> {
   const id = await sessionUserId(request);
   if (!id) return null;
-  const row = await db.find(users, id);
+  const row = await (await getDb()).find(users, id);
   return row ? { id: row.id, apiToken: row.api_token } : null;
 }
 
@@ -81,7 +89,9 @@ export async function currentUser(request: Request): Promise<User | null> {
  * @returns The user, or `null` for a token nobody holds
  */
 export async function userByToken(token: string): Promise<User | null> {
-  const row = await db.findOne(users, { where: { api_token: token } });
+  const row = await (await getDb()).findOne(users, {
+    where: { api_token: token },
+  });
   return row ? { id: row.id, apiToken: row.api_token } : null;
 }
 
@@ -118,8 +128,8 @@ export async function signIn(request: Request): Promise<string> {
 
   let claims;
   try {
-    ({ payload: claims } = await jwtVerify(token, idpKeys, {
-      issuer: config.idpOrigin,
+    ({ payload: claims } = await jwtVerify(token, keys(), {
+      issuer: config().idpOrigin,
     }));
   } catch (error) {
     throw new SignInError(`invalid token: ${(error as Error).message}`);
@@ -133,8 +143,9 @@ export async function signIn(request: Request): Promise<string> {
   // The proof is bound to this request's URL, which a proxy in front of the server may have
   // rewritten; `RP_ORIGIN` is what the browser actually addressed.
   const url = new URL(request.url);
-  const addressed = config.rpOrigin
-    ? new Request(`${config.rpOrigin}${url.pathname}${url.search}`, request)
+  const { rpOrigin } = config();
+  const addressed = rpOrigin
+    ? new Request(`${rpOrigin}${url.pathname}${url.search}`, request)
     : request;
   const proof = await verifyDpopProofFromRequest(addressed, { checkReplay });
   if (!proof.valid) throw new SignInError(`invalid DPoP proof: ${proof.error}`);
@@ -143,17 +154,18 @@ export async function signIn(request: Request): Promise<string> {
   }
 
   await ensureUser(userId);
-  return await sessionCookie.serialize(userId, {
+  return await cookie().serialize(userId, {
     secure: new URL(addressed.url).protocol === "https:",
   });
 }
 
 /** @returns The `Set-Cookie` value that signs the user out */
 export async function signOut(): Promise<string> {
-  return await sessionCookie.serialize("", { maxAge: 0 });
+  return await cookie().serialize("", { maxAge: 0 });
 }
 
 async function ensureUser(id: string): Promise<void> {
+  const db = await getDb();
   if (await db.find(users, id)) return;
   await db.create(users, { id, api_token: newId(), created_at: now() });
 }
@@ -166,6 +178,6 @@ async function ensureUser(id: string): Promise<void> {
  */
 export async function rotateApiToken(userId: string): Promise<string> {
   const token = newId();
-  await db.update(users, userId, { api_token: token });
+  await (await getDb()).update(users, userId, { api_token: token });
   return token;
 }

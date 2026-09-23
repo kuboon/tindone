@@ -1,0 +1,41 @@
+name: deploy
+
+# Deploys main to Cloudflare Workers. Needs the repository secrets CLOUDFLARE_API_TOKEN (a token
+# with "Edit Cloudflare Workers" permission) and CLOUDFLARE_ACCOUNT_ID, plus TURSO_DATABASE_URL and
+# TURSO_AUTH_TOKEN for the migration step. The Worker's own secrets are set once with
+# `wrangler secret put` — see README.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency: deploy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: deno task build
+      - name: Migrate the database
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: |
+          if [ -z "$TURSO_DATABASE_URL" ]; then
+            echo "::error::TURSO_DATABASE_URL is not set as a repository secret"
+            exit 1
+          fi
+          deno task db migrate
+      - uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: web
+          command: deploy

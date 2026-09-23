@@ -9,7 +9,7 @@ import { sessionStore } from "./_lib/session.ts";
  * to this browser's key — otherwise the next "Sign in" would come straight back signed in.
  */
 export const SignOut = clientEntry(
-  import.meta.url,
+  "file://client/islands/sign_out.tsx#SignOut",
   function SignOut(handle: Handle<{ idpOrigin: string }>) {
     let busy = false;
 

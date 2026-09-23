@@ -14,7 +14,7 @@ import { sessionStore } from "./_lib/session.ts";
  * Disabled until the key exists, because the thumbprint is part of the URL.
  */
 export const SignIn = clientEntry(
-  import.meta.url,
+  "file://client/islands/sign_in.tsx#SignIn",
   function SignIn(handle: Handle<{ idpOrigin: string }>) {
     if (typeof document !== "undefined") {
       sessionStore.addEventListener("change", () => handle.update(), {

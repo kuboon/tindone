@@ -102,7 +102,7 @@ function isUrl(content: string): boolean {
  * pointer move; a re-render only happens when a card is committed.
  */
 export const SwipeDeck = clientEntry(
-  import.meta.url,
+  "file://client/islands/swipe_deck.tsx#SwipeDeck",
   function SwipeDeck(handle: Handle<SwipeDeckProps>) {
     let index = 0;
     let busy = false;

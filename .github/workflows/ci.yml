@@ -19,3 +19,5 @@ jobs:
       - run: deno task check
       - run: deno task test
       - run: deno task build
+      # Bundle it the way a deploy would, without deploying: catches anything Workers can't load.
+      - run: npx --yes wrangler@4 deploy --dry-run --outdir .wrangler/dry-run

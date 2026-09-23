@@ -2,7 +2,7 @@
  * The environment every server test runs in: a throwaway database with the real migrations
  * applied, and a stand-in IdP publishing a JWKS on a local port.
  *
- * Import it before anything that reads `config.ts`, which reads the environment once, at load.
+ * Import it before anything that reads `config.ts`, which reads the environment once, on first use.
  */
 
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
@@ -33,7 +33,7 @@ Deno.env.set("SESSION_SECRET", "test-secret");
 const dbDir = await Deno.makeTempDir({ prefix: "tindone-test-" });
 Deno.env.set("TURSO_DATABASE_URL", `file:${dbDir}/test.db`);
 
-const { db } = await import("./db.ts");
+const db = await (await import("./db.ts")).getDb();
 for await (
   const dir of Deno.readDir(new URL("../db/migrations/", import.meta.url))
 ) {

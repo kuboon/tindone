@@ -8,7 +8,7 @@
 
 import { and, eq } from "@remix-run/data-table";
 
-import { db, type ListName, now, taskLogs, tasks } from "./db.ts";
+import { getDb, type ListName, now, taskLogs, tasks } from "./db.ts";
 import { newId } from "./ids.ts";
 import { notifyUser } from "./push.ts";
 
@@ -78,7 +78,7 @@ export async function listCounts(
 
 /** Every task a user has, oldest first — what the export copies. */
 export async function allTasks(userId: string): Promise<Task[]> {
-  return await db.findMany(tasks, {
+  return await (await getDb()).findMany(tasks, {
     where: { user_id: userId },
     orderBy: ["created_at", "asc"],
   }) as Task[];
@@ -92,7 +92,7 @@ export async function tasksInList(
   userId: string,
   list: ListName,
 ): Promise<Task[]> {
-  return await db.findMany(tasks, {
+  return await (await getDb()).findMany(tasks, {
     where: { user_id: userId, list },
     orderBy: [["updated_at", "asc"], ["created_at", "asc"]],
   }) as Task[];
@@ -100,7 +100,7 @@ export async function tasksInList(
 
 /** Finished tasks, most recently finished first. */
 export async function doneTasks(userId: string): Promise<Task[]> {
-  return await db.findMany(tasks, {
+  return await (await getDb()).findMany(tasks, {
     where: { user_id: userId, list: "done" },
     orderBy: ["updated_at", "desc"],
   }) as Task[];
@@ -108,19 +108,19 @@ export async function doneTasks(userId: string): Promise<Task[]> {
 
 /** A task by id, whoever owns it — task pages are shareable by URL. */
 export async function findTask(taskId: string): Promise<Task | null> {
-  return await db.find(tasks, taskId) as Task | null;
+  return await (await getDb()).find(tasks, taskId) as Task | null;
 }
 
 /** A task's moves, newest first. */
 export async function taskHistory(taskId: string): Promise<TaskLog[]> {
-  return await db.findMany(taskLogs, {
+  return await (await getDb()).findMany(taskLogs, {
     where: { task_id: taskId },
     orderBy: ["created_at", "desc"],
   }) as TaskLog[];
 }
 
 async function ownTask(userId: string, taskId: string): Promise<Task> {
-  const task = await db.findOne(tasks, {
+  const task = await (await getDb()).findOne(tasks, {
     where: and(eq(tasks.id, taskId), eq(tasks.user_id, userId)),
   }) as Task | null;
   if (!task) throw new TaskError("Task not found", 404);
@@ -140,7 +140,7 @@ export async function createTask(
   const content = validContent(rawContent);
   const id = newId();
   const t = now();
-  await db.transaction(async (tx) => {
+  await (await getDb()).transaction(async (tx) => {
     await tx.create(tasks, {
       id,
       user_id: userId,
@@ -194,7 +194,7 @@ export async function updateTask(
   const task = await ownTask(userId, taskId);
   const t = now();
 
-  await db.transaction(async (tx) => {
+  await (await getDb()).transaction(async (tx) => {
     await tx.update(tasks, taskId, {
       ...(update.list !== undefined ? { list: update.list } : {}),
       ...(content !== undefined ? { content } : {}),
@@ -232,7 +232,7 @@ export async function deleteLog(
   logId: string,
 ): Promise<void> {
   await ownTask(userId, taskId);
-  await db.deleteMany(taskLogs, {
+  await (await getDb()).deleteMany(taskLogs, {
     where: and(eq(taskLogs.id, logId), eq(taskLogs.task_id, taskId)),
   });
 }

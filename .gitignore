@@ -2,3 +2,6 @@ node_modules/
 web/data/
 .env*
 .DS_Store
+web/dist/
+web/.wrangler/
+web/.dev.vars

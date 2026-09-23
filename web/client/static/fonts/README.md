@@ -1,12 +1,12 @@
-# og/fonts
+# fonts
 
-What the social cards are drawn with. Every `.ttf` or `.otf` here is registered
-with Skia, in file-name order, and Skia falls back through them per glyph — so
-the order is the fallback order, and adding a script is dropping a file in.
+What the tasks' social cards (`server/og.ts`) are drawn with. resvg is handed all three and falls
+back through them per glyph, so a Japanese title is Noto Sans JP and the Latin around it is still
+Inter.
 
-Nothing here is served to a browser. These files exist because Skia needs real
-font data: there is no system font stack to fall back on and no CSS to resolve
-one.
+They sit under `static/` because a Worker has no file system: on Cloudflare the card renderer
+fetches them from the Static Assets binding, in development it reads them from disk. No page links
+them.
 
 | File                     | Covers                               | Licence                                                        |
 | ------------------------ | ------------------------------------ | -------------------------------------------------------------- |
@@ -19,11 +19,9 @@ own.
 
 ## Why Japanese has one weight and Latin has two
 
-Skia synthesises a bold face for a family that has none, so a bold title is bold
-in both scripts from these three files. Inter ships real weights because they
-are 400KB each and a drawn bold beats a synthesised one; Noto Sans JP does not,
-because a second CJK face is another 2MB for a difference nobody would pick out
-of a lineup at this size.
+Inter ships real weights because they are 400KB each. Noto Sans JP does not,
+because a second CJK face is another 2MB; a bold Japanese title is drawn in the
+regular weight.
 
 ## The Japanese subset
 
@@ -34,18 +32,9 @@ and all 6,355 kanji of levels 1 and 2. That is 6,878 characters and 2.2MB,
 against 16,732 characters and 5.3MB for the whole font.
 
 A character outside that set — `鷗`, `𠮟`, anything in JIS X 0213 but not 0208,
-and every script neither font covers — is drawn as this font's `.notdef`, which
-is blank. A name quietly loses a letter, on an image nobody looks at. So the
-build says so:
-
-```
-og: no glyph for 鷗 in /blog/mori-ogai — see server/og/fonts/README.md
-```
-
-It is a warning rather than an error because one missing character is not a
-reason to fail a deploy. To make it go away, replace this file with the full
-Noto Sans JP, or with any other font that has the character: the directory is
-the only place the fonts are named.
+and every script neither font covers — is left out of the card. To cover it,
+replace this file with the full Noto Sans JP, or add any other font that has the
+character and list it in `server/og.ts`.
 
 ### Regenerating it
 

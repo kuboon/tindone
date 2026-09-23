@@ -12,7 +12,7 @@ import { sessionStore } from "./_lib/session.ts";
  * made by the same key; the server checks both and answers with the session cookie. Then home.
  */
 export const SignInCallback = clientEntry(
-  import.meta.url,
+  "file://client/islands/sign_in_callback.tsx#SignInCallback",
   function SignInCallback(handle: Handle<{ idpOrigin: string }>) {
     let error: string | null = null;
 

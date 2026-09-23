@@ -24,7 +24,7 @@ type Status = "checking" | "blocked" | "off" | "on" | "busy";
  * - gray dot: this browser cannot, as things stand — tap for how to fix that
  */
 export const PushButton = clientEntry(
-  import.meta.url,
+  "file://client/islands/push_button.tsx#PushButton",
   function PushButton(handle: Handle<{ idpOrigin: string }>) {
     let status: Status = "checking";
     let subscriptionId: string | null = null;

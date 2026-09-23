@@ -34,7 +34,7 @@ function toMarkdown(tasks: readonly ExportTask[]): string {
 
 /** Copies every task to the clipboard, as Markdown grouped by list or as JSON. */
 export const ExportButtons = clientEntry(
-  import.meta.url,
+  "file://client/islands/export_buttons.tsx#ExportButtons",
   function ExportButtons(handle: Handle<{ tasks: ExportTask[] }>) {
     let copied: Format | null = null;
 

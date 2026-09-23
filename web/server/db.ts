@@ -7,13 +7,17 @@
  *
  * Turso's client is asynchronous, which the stock SQLite adapter cannot drive, so the adapter is
  * `@remix-kbn/data-table-sqlite-turso`. A remote database is reached with `@libsql/client/web`,
- * which is plain `fetch` and runs anywhere Deno does; only a local `file:` database needs the
- * native client, and that is imported on demand so a deploy never loads it.
+ * which is plain `fetch` and runs on Workers as well as Deno; only a local `file:` database needs
+ * the native client, and that is imported on demand, in development only.
  */
 
 import { column as c, table } from "@remix-run/data-table";
-import { createTursoDatabase } from "@remix-kbn/data-table-sqlite-turso";
+import {
+  createTursoDatabase,
+  type TursoDatabase,
+} from "@remix-kbn/data-table-sqlite-turso";
 import type { Client } from "@libsql/client";
+import { createClient as createWebClient } from "@libsql/client/web";
 
 import { config } from "./config.ts";
 
@@ -58,22 +62,32 @@ export const taskLogs = table({
 });
 
 async function connect(): Promise<Client> {
+  const { databaseUrl, databaseAuthToken } = config();
   const options = {
-    url: config.databaseUrl,
-    authToken: config.databaseAuthToken || undefined,
+    url: databaseUrl,
+    authToken: databaseAuthToken || undefined,
   };
-  if (config.databaseUrl.startsWith("file:")) {
-    const path = config.databaseUrl.slice("file:".length);
+  if (databaseUrl.startsWith("file:")) {
+    const path = databaseUrl.slice("file:".length);
     const dir = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
     if (dir) await Deno.mkdir(dir, { recursive: true });
-    const { createClient } = await import("@libsql/client");
+    // Named through a variable so the Worker bundle never pulls the native client in: a Worker only
+    // ever sees a remote URL, and the native module could not load there anyway.
+    const nativeClient = "@libsql/client";
+    const { createClient } = await import(
+      nativeClient
+    ) as typeof import("@libsql/client");
     return createClient(options);
   }
-  const { createClient } = await import("@libsql/client/web");
-  return createClient(options);
+  return createWebClient(options);
 }
 
-export const db = createTursoDatabase(await connect());
+let database: Promise<TursoDatabase> | undefined;
+
+/** The database, connected on first use. */
+export function getDb(): Promise<TursoDatabase> {
+  return database ??= connect().then(createTursoDatabase);
+}
 
 /** Milliseconds since the epoch — the unit every `*_at` column is in. */
 export function now(): number {

@@ -25,7 +25,7 @@ export interface ApiInstProps {
  * The URL carries the user's API token, which is what lets a script call it without signing in.
  */
 export const ApiInst = clientEntry(
-  import.meta.url,
+  "file://client/islands/api_inst.tsx#ApiInst",
   function ApiInst(handle: Handle<ApiInstProps>) {
     let tab: Tab = "curl";
     let copied = false;

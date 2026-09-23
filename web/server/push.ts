@@ -37,8 +37,9 @@ function getSigningKey(): Promise<SigningKey> {
   return signingKey ??= (async () => {
     let privateKey: CryptoKey;
     let publicJwk: JsonWebKey;
-    if (config.rpSigningKeyJwk) {
-      const jwk = JSON.parse(config.rpSigningKeyJwk) as JsonWebKey;
+    const { rpSigningKeyJwk } = config();
+    if (rpSigningKeyJwk) {
+      const jwk = JSON.parse(rpSigningKeyJwk) as JsonWebKey;
       privateKey = await crypto.subtle.importKey(
         "jwk",
         jwk,
@@ -111,7 +112,8 @@ export async function notifyUser(
   userId: string,
   notification: Notification,
 ): Promise<DeliveryResult[]> {
-  if (!config.rpOrigin) {
+  const { rpOrigin, idpOrigin } = config();
+  if (!rpOrigin) {
     throw new Error(
       "RP_ORIGIN is not set — it is the clientId the IdP knows this app by",
     );
@@ -120,15 +122,15 @@ export async function notifyUser(
   const iat = Math.floor(Date.now() / 1000);
   const assertion = await new SignJWT({})
     .setProtectedHeader({ alg: "ES256", typ: "client-assertion+jwt", kid })
-    .setIssuer(config.rpOrigin)
-    .setSubject(config.rpOrigin)
-    .setAudience(config.idpOrigin)
+    .setIssuer(rpOrigin)
+    .setSubject(rpOrigin)
+    .setAudience(idpOrigin)
     .setIssuedAt(iat)
     .setExpirationTime(iat + 60)
     .setJti(crypto.randomUUID())
     .sign(privateKey);
 
-  const response = await fetch(`${config.idpOrigin}/rp/notifications`, {
+  const response = await fetch(`${idpOrigin}/rp/notifications`, {
     method: "POST",
     headers: {
       "content-type": "application/json",

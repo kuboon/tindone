@@ -4,7 +4,8 @@ Swipe your way to GTD nirvana.
 
 ## Tech Stack
 
-- **Runtime**: [Deno](https://deno.com) 2.x
+- **Runtime**: [Deno](https://deno.com) 2.x for development and builds;
+  [Cloudflare Workers](https://workers.cloudflare.com) in production
 - **Framework**: [Remix v3](https://remix.run) — `@remix-run/fetch-router` + `@remix-run/ui`
   (server-rendered pages, hydrated islands). Structure follows
   [remix3-ssg-gh-pages](https://github.com/kuboon/remix3-ssg-gh-pages), served live instead of
@@ -13,7 +14,7 @@ Swipe your way to GTD nirvana.
 - **Push notifications**: delivered by id.kbn.one
 - **Database**: Turso (libSQL) via `@remix-run/data-table` +
   [`@remix-kbn/data-table-sqlite-turso`](https://jsr.io/@remix-kbn/data-table-sqlite-turso)
-- **Social cards**: drawn with Skia (`canvaskit-wasm`)
+- **Social cards**: drawn with resvg (`@resvg/resvg-wasm`)
 
 ## Features
 
@@ -31,8 +32,10 @@ Swipe your way to GTD nirvana.
 
 ```
 mise.toml            # `mise run build` — installs Deno, builds web/
+vercel.json          # turns off the old Vercel deployments
 web/
   deno.json          # workspace: members, imports, tasks, lint + fmt
+  wrangler.jsonc     # the Cloudflare Worker: entry, Static Assets, vars
   db/migrations/     # plain-SQL migrations (`deno task db migrate`)
   client/            # everything the browser is given — type-checked without deno.ns
     routes.ts        # every URL the app answers
@@ -40,10 +43,31 @@ web/
     pages/           # server-rendered screens
     islands/         # hydrated client components (each file is an entrypoint)
       _lib/session.ts  # the browser's DPoP key + id.kbn.one session, shared by islands
-    static/          # app.css, icons, sw.js, manifest
-  server/            # the router, auth, database, push, OG images
-    router.tsx       # routes → controllers; `deno serve router.tsx`
+    static/          # app.css, icons, fonts, sw.js, manifest
+  server/            # auth, database, push, OG images
+    app.tsx          # routes → controllers, the same on both hosts
+    router.tsx       # development entry: `deno serve router.tsx`, compiles client/ on startup
+    worker.ts        # Cloudflare Workers entry
+    build.ts         # `deno task build`: writes dist/ for Wrangler
 ```
+
+### Two hosts, one app
+
+`server/app.tsx` is the whole app and runs unchanged on both. What differs is how each host finds
+things that are not code:
+
+|                   | `deno task dev`                          | Cloudflare Workers                                         |
+| ----------------- | ---------------------------------------- | ---------------------------------------------------------- |
+| Environment       | `Deno.env`                               | the Worker's `env` (`wrangler.jsonc` vars + secrets)       |
+| Client bundle     | compiled on startup (`Deno.bundle`)      | prebuilt into `dist/public/assets/` + `dist/manifest.json` |
+| Static files      | served by the router                     | Workers Static Assets (`dist/public/`)                     |
+| OG card resources | read from disk                           | wasm imported as a module, fonts via the `ASSETS` binding  |
+| Database          | `web/data/app.db` (or `TURSO_*`)         | Turso over HTTP (`@libsql/client/web`)                     |
+
+Islands name themselves `file://client/islands/<name>.tsx#<Export>` in `clientEntry()` rather than
+`import.meta.url`: the Worker is a single minified bundle, where every module shares one
+`import.meta.url` and function names are mangled. `server/scripts.ts` resolves those ids on both
+hosts.
 
 ## How sign-in works
 
@@ -85,15 +109,15 @@ The old VAPID-based notifications are gone; devices must be registered again.
 
 1. **id.kbn.one**: add this app's origin (`RP_ORIGIN`) to id.kbn.one's `AUTHORIZE_WHITELIST`.
    That is what allows the `/authorize` redirect back here and server-sent notifications.
-2. **Environment variables**
+2. **Environment**
 
-   | Name                                   | Meaning                                                                                                          |
-   | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-   | `RP_ORIGIN`                            | Public origin of this app, e.g. `https://tindone.example`. Required for push; also used for absolute URLs.        |
-   | `SESSION_SECRET`                       | Secret(s) signing the session cookie, comma-separated, newest first. A dev default is used when unset.             |
-   | `RP_SIGNING_KEY_JWK`                   | ES256 private key (JWK JSON) for client assertions. Generated per process when unset — set it in production.      |
-   | `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` | Turso database. Defaults to the local file `web/data/app.db`.                                                    |
-   | `IDP_ORIGIN`                           | Defaults to `https://id.kbn.one`.                                                                                 |
+   | Name                                     | Meaning                                                                                                     |
+   | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+   | `RP_ORIGIN`                              | Public origin of this app, e.g. `https://tindone.example`. Required for push; also used for absolute URLs.  |
+   | `SESSION_SECRET`                         | Secret(s) signing the session cookie, comma-separated, newest first. A dev default is used when unset.      |
+   | `RP_SIGNING_KEY_JWK`                     | ES256 private key (JWK JSON) for client assertions. Generated per process when unset — set it in production. |
+   | `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` | Turso database. In development, defaults to the local file `web/data/app.db`; required on Workers.          |
+   | `IDP_ORIGIN`                             | Defaults to `https://id.kbn.one`.                                                                           |
 
    Generate a signing key with:
 
@@ -108,15 +132,40 @@ The old VAPID-based notifications are gone; devices must be registered again.
    deno task db migrate      # uses TURSO_DATABASE_URL / TURSO_AUTH_TOKEN
    ```
 
-4. **Run**
+4. **Develop**
 
    ```sh
    cd web
    deno task dev     # http://localhost:8000, with --watch
-   deno task start   # production server
-   deno task build   # install dependencies and compile the browser bundle (no crawl)
    deno task check   # type-check, lint, format-check
    deno task test
+   deno task build   # dist/ for Workers — compiles the client and bundles the Worker (no crawl)
+   npx wrangler dev  # run dist/ locally in workerd; put variables in web/.dev.vars
    ```
 
    Local sign-in needs `http://localhost:8000` on id.kbn.one's whitelist.
+
+## Deploy (Cloudflare Workers)
+
+`.github/workflows/deploy.yml` deploys `main` on every push: `deno task build`, then
+`deno task db migrate`, then `wrangler deploy` from `web/`.
+
+One-time setup:
+
+1. **Repository secrets** (Settings → Secrets and variables → Actions): `CLOUDFLARE_API_TOKEN` (a
+   token with *Edit Cloudflare Workers*), `CLOUDFLARE_ACCOUNT_ID`, `TURSO_DATABASE_URL`,
+   `TURSO_AUTH_TOKEN`.
+2. **Worker secrets**, from `web/`:
+
+   ```sh
+   npx wrangler secret put SESSION_SECRET
+   npx wrangler secret put RP_SIGNING_KEY_JWK
+   npx wrangler secret put TURSO_DATABASE_URL
+   npx wrangler secret put TURSO_AUTH_TOKEN
+   ```
+
+3. **`RP_ORIGIN`**: set it under `vars` in `web/wrangler.jsonc` to the Worker's URL
+   (`https://tindone.<subdomain>.workers.dev` or a custom domain), and add the same origin to
+   id.kbn.one's `AUTHORIZE_WHITELIST`.
+
+The Worker is about 1 MB gzipped (resvg's WebAssembly is most of it), within the free plan's 3 MB.

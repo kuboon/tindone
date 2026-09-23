@@ -1,12 +1,11 @@
 /**
- * The files under `client/static/`, served verbatim.
+ * The files under `client/static/`, served verbatim — in development.
  *
- * A handful of files — the stylesheet, the icons, the service worker — so this is a lookup rather
- * than a file server: a path that names anything outside the directory, or a type not listed here,
- * is a 404.
+ * On Workers these URLs are Static Assets, answered before the Worker runs, so this only ever reads
+ * files under `deno serve`. A handful of files — the stylesheet, the icons, the fonts, the service
+ * worker — so this is a lookup rather than a file server: a path that names anything outside the
+ * directory, or a type not listed here, is a 404.
  */
-
-const staticDir = new URL("../client/static/", import.meta.url);
 
 const TYPES: Record<string, string> = {
   css: "text/css; charset=utf-8",
@@ -14,6 +13,7 @@ const TYPES: Record<string, string> = {
   svg: "image/svg+xml",
   png: "image/png",
   webmanifest: "application/manifest+json",
+  ttf: "font/ttf",
 };
 
 /**
@@ -30,6 +30,7 @@ export async function serveStatic(
     return notFound();
   }
   try {
+    const staticDir = new URL("../client/static/", import.meta.url);
     const body = await Deno.readFile(new URL(path, staticDir));
     return new Response(body, {
       headers: { "content-type": type, "cache-control": cacheControl },

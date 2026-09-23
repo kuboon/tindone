@@ -1,7 +1,8 @@
 import { assertEquals, assertRejects } from "@std/assert";
 
 import { shutdown } from "./test_setup.ts";
-const { db, users } = await import("./db.ts");
+const { getDb, users } = await import("./db.ts");
+const db = await getDb();
 const tasks = await import("./tasks.ts");
 
 await db.create(users, { id: "alice", api_token: "a", created_at: 0 });
