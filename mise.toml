@@ -1,0 +1,8 @@
+# Installs Deno and runs the app's build in web/ (`mise run build`).
+[tools]
+deno = "2"
+
+[tasks.build]
+description = "Install dependencies and compile the browser bundle"
+dir = "web"
+run = "deno task build"

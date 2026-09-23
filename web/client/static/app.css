@@ -1,0 +1,100 @@
+/*
+ * The app's design tokens and document-level defaults.
+ *
+ * Everything else is a `css(...)` mixin from `@remix-run/ui`, rendered into each page's <head>.
+ * Generated rules land in the native `rmx` cascade layer and a mixin cannot choose its layer, so
+ * this file names the order: `base` (this file — defaults any component may override), `rmx`
+ * (Remix's), `app` (for a rule that must beat a component on purpose).
+ *
+ * The token values live here because light and dark swap between two sets of them;
+ * `client/tokens.ts` holds their names.
+ */
+
+@layer base, rmx, app;
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+
+    --font-sans:
+      -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+      "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Noto Sans JP", sans-serif,
+      "Apple Color Emoji", "Segoe UI Emoji";
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+    --radius-sm: 5px;
+    --radius-md: 10px;
+    --radius-lg: 15px;
+
+    --content-width: 600px;
+
+    --bg: #ffffff;
+    --fg: #171717;
+    /* Tinder-like pink/red. */
+    --primary: #ff4458;
+    --card: #f0f0f0;
+    --border: #dddddd;
+    --muted: #666666;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0a0a0a;
+      --fg: #ededed;
+      --card: #222222;
+      --border: #333333;
+      --muted: #aaaaaa;
+    }
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    margin: 0;
+    max-width: 100vw;
+    overflow-x: hidden;
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--fg);
+  }
+
+  h1,
+  h2,
+  h3,
+  p {
+    margin: 0;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  button {
+    cursor: pointer;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    padding: 0;
+  }
+
+  button:disabled {
+    cursor: default;
+  }
+
+  input,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+
+  code {
+    font-family: var(--font-mono);
+  }
+}

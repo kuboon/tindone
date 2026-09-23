@@ -1,0 +1,23 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: deno task check
+      - run: deno task test
+      - run: deno task build
+      # Bundle it the way a deploy would, without deploying: catches anything Workers can't load.
+      - run: npx --yes wrangler@4 deploy --dry-run --outdir .wrangler/dry-run
