@@ -35,6 +35,7 @@ web/
   deno.json          # workspace: members, imports, tasks, lint + fmt
   wrangler.jsonc     # the Cloudflare Worker: entry, Static Assets, vars
   db/migrations/     # plain-SQL migrations (`deno task db migrate`)
+  docs/              # Markdown served at /docs/<slug> (api.md → /docs/api)
   client/            # everything the browser is given — type-checked without deno.ns
     routes.ts        # every URL the app answers
     layout.tsx       # the document shell
@@ -82,6 +83,11 @@ hosts.
 Every user has an API token, sent as `Authorization: Bearer <token>`, so scripts need no sign-in.
 The token and ready-to-copy snippets are shown on the home and task pages, and the token can be
 regenerated from the home page.
+
+The full reference is [`web/docs/api.md`](web/docs/api.md), served as a page at
+[`/docs/api`](https://gtd.kbn.one/docs/api). Every `web/docs/<slug>.md` is converted with
+[`@kuboon/md`](https://jsr.io/@kuboon/md) ahead of time — on startup in development, into
+`dist/docs.json` by `deno task build` — so the Worker only renders the result.
 
 - `POST /api/:list` — add a task (`list`: `inbox` / `now` / `next` / `waiting`). Body is the text
   itself (`text/plain`) or `{ "content": "…" }` (JSON). Content is 1–100 chars.

@@ -6,6 +6,7 @@ import {
   type SerializableValue,
 } from "@remix-run/ui";
 
+import { routes } from "../routes.ts";
 import { color, font, radius } from "../tokens.ts";
 
 const TABS = ["curl", "wget", "fetch"] as const;
@@ -123,6 +124,11 @@ export const ApiInst = clientEntry(
             </p>
           )
           : null}
+        <p mix={noteStyle}>
+          <a href={routes.doc.href({ slug: "api" })} mix={docsLinkStyle}>
+            API reference →
+          </a>
+        </p>
       </section>
     );
   },
@@ -172,3 +178,5 @@ const noteStyle = css({
   fontSize: "0.75rem",
   color: color.muted,
 });
+
+const docsLinkStyle = css({ color: color.primary, fontWeight: "bold" });
