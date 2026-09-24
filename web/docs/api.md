@@ -1,6 +1,6 @@
 # tindone API
 
-Add and move tasks from scripts, shortcuts and other apps.
+Read, add and move tasks from scripts, shortcuts and other apps.
 
 ## Authentication
 
@@ -42,6 +42,37 @@ Errors are JSON with a single `error` field:
 | `400`  | The body or a parameter is invalid                  |
 | `401`  | The token is missing or unknown                     |
 | `404`  | The task does not exist, or belongs to someone else |
+
+## List tasks
+
+```http
+GET /api/:list
+```
+
+`:list` is `inbox`, `now`, `next`, `waiting` or `done`.
+
+Open lists come in swipe order — least recently moved first. `done` comes most recently finished
+first. Times are Unix milliseconds.
+
+**Response** `200`
+
+```json
+{
+  "tasks": [
+    {
+      "id": "s_oJakMbNZbie87G2g1RWg",
+      "content": "buy milk",
+      "list": "inbox",
+      "created_at": 1790200335883,
+      "updated_at": 1790200335883
+    }
+  ]
+}
+```
+
+```sh
+curl https://gtd.kbn.one/api/inbox -H "Authorization: Bearer <token>"
+```
 
 ## Add a task
 

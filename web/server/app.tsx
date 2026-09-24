@@ -164,7 +164,7 @@ function formError(error: unknown): Response {
 /** The API is a credential in a URL, not a cookie, so any origin may call it. */
 const CORS = {
   "access-control-allow-origin": "*",
-  "access-control-allow-methods": "POST, PATCH, DELETE, OPTIONS",
+  "access-control-allow-methods": "GET, POST, PATCH, DELETE, OPTIONS",
   "access-control-allow-headers": "authorization, content-type",
 };
 
@@ -413,6 +413,25 @@ async function apiUser(context: AppContext): Promise<User | Response> {
 
 const apiController = createController(routes.api, {
   actions: {
+    async list(context) {
+      const user = await apiUser(context);
+      if (user instanceof Response) return user;
+      const { list } = context.params;
+      if (!isListName(list)) return apiError(new TaskError("Invalid list"));
+      const found = list === "done"
+        ? await doneTasks(user.id)
+        : await tasksInList(user.id, list);
+      return Response.json({
+        tasks: found.map(({ id, content, list, created_at, updated_at }) => ({
+          id,
+          content,
+          list,
+          created_at,
+          updated_at,
+        })),
+      }, { headers: { ...CORS, "cache-control": "private, no-store" } });
+    },
+
     async create(context) {
       const user = await apiUser(context);
       if (user instanceof Response) return user;

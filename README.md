@@ -89,6 +89,7 @@ The full reference is [`web/docs/api.md`](web/docs/api.md), served as a page at
 [`@kuboon/md`](https://jsr.io/@kuboon/md) ahead of time — on startup in development, into
 `dist/docs.json` by `deno task build` — so the Worker only renders the result.
 
+- `GET /api/:list` — the tasks in a list (`inbox` / `now` / `next` / `waiting` / `done`).
 - `POST /api/:list` — add a task (`list`: `inbox` / `now` / `next` / `waiting`). Body is the text
   itself (`text/plain`) or `{ "content": "…" }` (JSON). Content is 1–100 chars.
 - `PATCH /api/tasks/:taskId` — `{ "list": "done" }` and/or `{ "content": "…" }`.
