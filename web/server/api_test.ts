@@ -40,6 +40,38 @@ Deno.test("the API takes its token from the Authorization header", async () => {
   await moved.body?.cancel();
 });
 
+Deno.test("GET /api/:list returns the list's tasks", async () => {
+  const auth = { authorization: "Bearer carol-token" };
+  for (const content of ["first", "second"]) {
+    const created = await api("/api/waiting", {
+      method: "POST",
+      headers: auth,
+      body: content,
+    });
+    assertEquals(created.status, 200);
+    await created.body?.cancel();
+  }
+  const response = await api("/api/waiting", { headers: auth });
+  assertEquals(response.status, 200);
+  const { tasks } = await response.json();
+  assertEquals(
+    tasks.map((task: { content: string; list: string }) => [
+      task.content,
+      task.list,
+    ]),
+    [["first", "waiting"], ["second", "waiting"]],
+  );
+  assertEquals("user_id" in tasks[0], false);
+
+  const unknown = await api("/api/someday", { headers: auth });
+  assertEquals(unknown.status, 400);
+  await unknown.body?.cancel();
+
+  const anonymous = await api("/api/waiting");
+  assertEquals(anonymous.status, 401);
+  await anonymous.body?.cancel();
+});
+
 Deno.test("a missing or unknown token is a 401", async () => {
   const attempts: HeadersInit[] = [
     {},

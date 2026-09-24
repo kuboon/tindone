@@ -38,6 +38,7 @@ export const routes = route("", {
     logout: post("/logout"),
   }),
   api: route("api", {
+    list: get("/:list"),
     create: post("/:list"),
     update: patch("/tasks/:taskId"),
     deleteLog: del("/tasks/:taskId/logs/:logId"),
