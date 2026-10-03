@@ -96,7 +96,7 @@ function isUrl(content: string): boolean {
  * Drag a card — or press an arrow key — right, left, down or up to move it; the card flies off,
  * the next one is already there, and the move is sent in the background. When the deck runs out
  * it moves on to the next list (inbox → now → waiting → next → home), and the next deck slides in
- * from the side its cards were swiped to.
+ * from the side its cards were swiped to. Escape goes back home.
  *
  * Dragging writes the card's transform straight to the element instead of re-rendering on every
  * pointer move; a re-render only happens when a card is committed.
@@ -244,6 +244,11 @@ export const SwipeDeck = clientEntry(
           active instanceof HTMLSelectElement ||
           (active as HTMLElement | null)?.isContentEditable
         ) return;
+        if (event.key === "Escape") {
+          event.preventDefault();
+          void navigate(routes.home.href());
+          return;
+        }
         const direction = ({
           ArrowRight: "right",
           ArrowLeft: "left",

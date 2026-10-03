@@ -20,7 +20,7 @@ Swipe your way to GTD nirvana.
 - **GTD Lists**: Inbox, Now, Next, Waiting, Done.
 - **Tinder-like Swipe**: process a list as a card deck — drag or use the arrow keys. Right → Now,
   left → Next, down → Waiting, up → Done. An empty deck moves on to the next list
-  (inbox → now → waiting → next → home).
+  (inbox → now → waiting → next → home). Esc goes back home.
 - **Task Log**: every move is recorded; log lines can be deleted.
 - **Remote Update**: copy a curl / wget / `fetch` snippet to add or move tasks from a terminal.
 - **Push Notifications**: a move made through the API notifies your devices.
