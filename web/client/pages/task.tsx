@@ -1,4 +1,4 @@
-import { css, type Handle } from "@remix-run/ui";
+import { css, type Handle, on } from "@remix-run/ui";
 
 import { LIST_NAMES, type ListName } from "../lists.ts";
 import { routes } from "../routes.ts";
@@ -27,6 +27,13 @@ export interface LogView {
   created_at: number;
 }
 
+/** What the owner can do to the task. Each rejects with a message to show. */
+export interface TaskActions {
+  save(content: string): Promise<void>;
+  move(list: ListName): Promise<void>;
+  deleteLog(logId: string): Promise<void>;
+}
+
 export interface TaskPageProps {
   task: TaskView;
   logs: LogView[];
@@ -35,14 +42,29 @@ export interface TaskPageProps {
    * can be opened by anyone with its link, but only the owner gets the controls.
    */
   api: { url: string; token: string } | null;
+  actions: TaskActions;
 }
 
-/** `/tasks/:taskId` — edit, move, and the history of one task. */
+/**
+ * `/tasks/:taskId` — edit, move, and the history of one task. Rendered by {@link TaskApp} once the
+ * task has been fetched.
+ */
 export function TaskPage(handle: Handle<TaskPageProps>) {
+  let error = "";
+
+  const run = async (action: () => Promise<void>) => {
+    error = "";
+    try {
+      await action();
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+    handle.update();
+  };
+
   return () => {
-    const { task, logs, api } = handle.props;
+    const { task, logs, api, actions } = handle.props;
     const owner = api !== null;
-    const update = routes.tasks.update.href({ taskId: task.id });
     const back = task.list === "done"
       ? routes.done.href()
       : routes.swipe.href({ list: task.list });
@@ -56,7 +78,19 @@ export function TaskPage(handle: Handle<TaskPageProps>) {
         <section mix={sectionStyle}>
           {owner
             ? (
-              <form method="post" action={update} mix={inlineFormStyle}>
+              <form
+                mix={[
+                  inlineFormStyle,
+                  on("submit", (event) => {
+                    event.preventDefault();
+                    const form = event.currentTarget as HTMLFormElement;
+                    const content = String(
+                      new FormData(form).get("content") ?? "",
+                    );
+                    void run(() => actions.save(content));
+                  }),
+                ]}
+              >
                 <input
                   type="text"
                   name="content"
@@ -69,6 +103,7 @@ export function TaskPage(handle: Handle<TaskPageProps>) {
               </form>
             )
             : <h1 mix={contentTitleStyle}>{task.content}</h1>}
+          {error ? <p mix={errorStyle}>{error}</p> : null}
           <div mix={[mutedStyle, currentStyle]}>
             Current List:{" "}
             <strong mix={strongStyle}>{task.list.toUpperCase()}</strong>
@@ -79,20 +114,21 @@ export function TaskPage(handle: Handle<TaskPageProps>) {
           ? (
             <section mix={sectionStyle}>
               <h2 mix={sectionTitleStyle}>Move to:</h2>
-              <form method="post" action={update} mix={chipsStyle}>
+              <div mix={chipsStyle}>
                 {LIST_NAMES.map((list) => (
                   <button
                     key={list}
-                    type="submit"
-                    name="list"
-                    value={list}
+                    type="button"
                     disabled={list === task.list}
-                    mix={chipStyle}
+                    mix={[
+                      chipStyle,
+                      on("click", () => void run(() => actions.move(list))),
+                    ]}
                   >
                     {list.toUpperCase()}
                   </button>
                 ))}
-              </form>
+              </div>
             </section>
           )
           : null}
@@ -111,15 +147,18 @@ export function TaskPage(handle: Handle<TaskPageProps>) {
                   </span>
                   {owner
                     ? (
-                      <form
-                        method="post"
-                        action={routes.tasks.deleteLog.href({
-                          taskId: task.id,
-                          logId: log.id,
-                        })}
+                      <button
+                        type="button"
+                        mix={[
+                          deleteStyle,
+                          on(
+                            "click",
+                            () => void run(() => actions.deleteLog(log.id)),
+                          ),
+                        ]}
                       >
-                        <button type="submit" mix={deleteStyle}>Delete</button>
-                      </form>
+                        Delete
+                      </button>
                     )
                     : null}
                 </span>
@@ -145,6 +184,8 @@ const contentInputStyle = css({ fontSize: "1.2rem", fontWeight: "bold" });
 const contentTitleStyle = css({ fontSize: "1.6rem", wordBreak: "break-word" });
 
 const currentStyle = css({ marginTop: "10px" });
+
+const errorStyle = css({ color: color.primary, marginTop: "10px" });
 
 const strongStyle = css({ color: color.fg });
 

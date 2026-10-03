@@ -20,8 +20,6 @@ export interface Config {
   readonly rpOrigin: string;
   /** ES256 private key (JWK JSON) for the client assertions. Empty: one is generated per process. */
   readonly rpSigningKeyJwk: string;
-  /** Secrets signing the session cookie, newest first (comma-separated in the environment). */
-  readonly sessionSecrets: readonly string[];
   /**
    * The SQLite file standing in for D1 under `deno serve` (`DATABASE_FILE`, default
    * `web/data/app.db`). Empty on Workers, where the database is the `DB` binding.
@@ -53,21 +51,10 @@ function read(key: string): string {
 }
 
 function load(): Config {
-  const secrets = read("SESSION_SECRET").split(",").map((s) => s.trim())
-    .filter(Boolean);
-  if (secrets.length === 0) {
-    // A default anyone can read would let anyone forge a session, so only development gets one.
-    if (source) throw new Error("SESSION_SECRET is not set");
-    console.warn(
-      "SESSION_SECRET is not set; using a development secret. Set it in production.",
-    );
-    secrets.push("tindone-development-secret");
-  }
   return {
     idpOrigin: read("IDP_ORIGIN") || "https://id.kbn.one",
     rpOrigin: read("RP_ORIGIN").replace(/\/+$/, ""),
     rpSigningKeyJwk: read("RP_SIGNING_KEY_JWK"),
-    sessionSecrets: secrets,
     // Only Deno has a file to default to: in a Worker's single bundle, `import.meta.url` does not
     // resolve a relative path, and the database is the binding anyway.
     databaseFile: read("DATABASE_FILE") || (source ? "" : localDatabase()),

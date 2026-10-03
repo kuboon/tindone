@@ -6,6 +6,7 @@
  */
 
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
+import { init, InMemoryKeyRepository } from "@kuboon/dpop";
 
 const idpKeys = await generateKeyPair("ES256", { extractable: true });
 const idpJwk = {
@@ -27,7 +28,6 @@ export const RP_ORIGIN = "http://rp.test";
 
 Deno.env.set("IDP_ORIGIN", IDP_ORIGIN);
 Deno.env.set("RP_ORIGIN", RP_ORIGIN);
-Deno.env.set("SESSION_SECRET", "test-secret");
 // One connection for the whole run, so an in-memory database lives as long as the tests do.
 Deno.env.set("DATABASE_FILE", ":memory:");
 
@@ -58,6 +58,38 @@ export async function idpToken(
     .setExpirationTime(iat + 3600)
     .setJti(crypto.randomUUID())
     .sign(idpKeys.privateKey);
+}
+
+/**
+ * A browser: its own DPoP key, and the request an island would send with it — captured rather
+ * than sent, so a test hands it to whatever it is testing.
+ */
+export async function browser() {
+  let captured: Request | undefined;
+  const { fetchDpop, thumbprint } = await init({
+    keyStore: new InMemoryKeyRepository(),
+    fetch: (input, requestInit) => {
+      captured = new Request(input, requestInit);
+      return Promise.resolve(new Response(null));
+    },
+  });
+  /**
+   * @param token id.kbn.one's token, sent as `Authorization: DPoP <token>`
+   * @param path Where on this app the request goes
+   * @param init Method and body
+   */
+  const request = async (
+    token: string,
+    path = "/api/me",
+    init: RequestInit = {},
+  ) => {
+    await fetchDpop(`${RP_ORIGIN}${path}`, {
+      ...init,
+      headers: { ...init.headers, authorization: `DPoP ${token}` },
+    });
+    return captured!;
+  };
+  return { thumbprint, request };
 }
 
 /** Lets the test runner exit: the stand-in IdP is the only thing keeping it alive. */

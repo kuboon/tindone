@@ -1,4 +1,4 @@
-import { css, type Handle } from "@remix-run/ui";
+import { css, type Handle, on } from "@remix-run/ui";
 
 import { APP_NAME } from "../layout.tsx";
 import { LIST_INFO, type ListName, SWIPE_LISTS } from "../lists.ts";
@@ -24,10 +24,35 @@ export interface HomeProps {
   /** Sent as `Authorization: Bearer …` by scripts calling the API. */
   apiToken: string;
   idpOrigin: string;
+  /** Adds a task to the inbox; rejects with a message to show. */
+  onAdd: (content: string) => Promise<void>;
+  onRotateToken: () => Promise<void>;
 }
 
-/** `/` for a signed-in user: add a task, pick a deck, and the API. */
+/**
+ * `/` for a signed-in user: add a task, pick a deck, and the API. Rendered by {@link HomeApp}
+ * once the user's data has arrived.
+ */
 export function Home(handle: Handle<HomeProps>) {
+  let busy = false;
+  let error = "";
+
+  const add = async (form: HTMLFormElement) => {
+    const content = String(new FormData(form).get("content") ?? "");
+    busy = true;
+    error = "";
+    handle.update();
+    try {
+      await handle.props.onAdd(content);
+      form.reset();
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    } finally {
+      busy = false;
+      handle.update();
+    }
+  };
+
   return () => {
     const { counts, tasks, quickApiUrl, apiToken, idpOrigin } = handle.props;
     return (
@@ -40,21 +65,16 @@ export function Home(handle: Handle<HomeProps>) {
         </header>
 
         <form
-          method="post"
-          action={routes.tasks.create.href()}
-          mix={[inlineFormStyle, addFormStyle]}
+          mix={[
+            inlineFormStyle,
+            addFormStyle,
+            on("submit", (event) => {
+              event.preventDefault();
+              void add(event.currentTarget as HTMLFormElement);
+            }),
+          ]}
         >
-          {
-            /*
-              Keyed by the task count: after a task is added the page comes back through a frame
-              navigation, which diffs the new HTML into the live DOM and keeps an input it can
-              match — with what was typed still in it. The frame diff matches on `data-rmx-key`
-              (a JSX `key` is not in server-rendered HTML), so a new count is a new element and
-              the field starts empty again.
-            */
-          }
           <input
-            data-rmx-key={`add-${tasks.length}`}
             type="text"
             name="content"
             maxLength={100}
@@ -63,8 +83,11 @@ export function Home(handle: Handle<HomeProps>) {
             placeholder="What needs to be done?"
             mix={inputStyle}
           />
-          <button type="submit" mix={primaryButtonStyle}>Add</button>
+          <button type="submit" disabled={busy} mix={primaryButtonStyle}>
+            Add
+          </button>
         </form>
+        {error ? <p mix={errorStyle}>{error}</p> : null}
 
         <div mix={gridStyle}>
           {SWIPE_LISTS.map((list) => (
@@ -101,9 +124,15 @@ export function Home(handle: Handle<HomeProps>) {
               add and move your tasks. Regenerating it stops every script using
               the old one.
             </p>
-            <form method="post" action={routes.rotateToken.href()}>
-              <button type="submit" mix={dangerStyle}>Regenerate token</button>
-            </form>
+            <button
+              type="button"
+              mix={[
+                dangerStyle,
+                on("click", () => void handle.props.onRotateToken()),
+              ]}
+            >
+              Regenerate token
+            </button>
           </details>
           <SignOut idpOrigin={idpOrigin} />
         </div>
@@ -125,6 +154,12 @@ const logoStyle = css({ fontSize: "2rem", color: color.primary });
 const bellStyle = css({ position: "absolute", top: 0, right: 0 });
 
 const addFormStyle = css({ marginBottom: "30px" });
+
+const errorStyle = css({
+  color: color.primary,
+  marginTop: "-20px",
+  marginBottom: "20px",
+});
 
 const gridStyle = css({
   display: "grid",

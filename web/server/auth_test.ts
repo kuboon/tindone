@@ -1,42 +1,22 @@
-import { assertEquals, assertMatch, assertRejects } from "@std/assert";
-import { init, InMemoryKeyRepository } from "@kuboon/dpop";
+import { assertEquals, assertRejects } from "@std/assert";
 
-import { idpToken, RP_ORIGIN, shutdown } from "./test_setup.ts";
-const { currentUser, signIn, SignInError, userByToken } = await import(
-  "./auth.ts"
-);
+import { browser, idpToken, RP_ORIGIN, shutdown } from "./test_setup.ts";
+const { AuthError, dpopUser, userByToken } = await import("./auth.ts");
 
-/** A browser: its own DPoP key, and the request `/auth/callback` would send. */
-async function browser() {
-  let captured: Request | undefined;
-  const { fetchDpop, thumbprint } = await init({
-    keyStore: new InMemoryKeyRepository(),
-    fetch: (input, requestInit) => {
-      captured = new Request(input, requestInit);
-      return Promise.resolve(new Response(null));
-    },
-  });
-  const request = async (token: string) => {
-    await fetchDpop(`${RP_ORIGIN}/auth/session`, {
-      method: "POST",
-      headers: { authorization: `DPoP ${token}` },
-    });
-    return captured!;
-  };
-  return { thumbprint, request };
-}
-
-Deno.test("a token bound to the caller's key signs the user in", async () => {
+Deno.test("a token bound to the caller's key is the user", async () => {
   const { thumbprint, request } = await browser();
   const token = await idpToken({ sub: "user-1", cnf: { jkt: thumbprint } });
-  const cookie = await signIn(await request(token));
-  assertMatch(cookie, /^tindone_session=/);
+  const user = await dpopUser(await request(token));
+  assertEquals(user.id, "user-1");
+  assertEquals((await userByToken(user.apiToken))?.id, "user-1");
+});
 
-  const user = await currentUser(
-    new Request(RP_ORIGIN, { headers: { cookie: cookie.split(";")[0] } }),
-  );
-  assertEquals(user?.id, "user-1");
-  assertEquals((await userByToken(user!.apiToken))?.id, "user-1");
+Deno.test("one token serves request after request, each with its own proof", async () => {
+  const { thumbprint, request } = await browser();
+  const token = await idpToken({ sub: "user-5", cnf: { jkt: thumbprint } });
+  const first = await dpopUser(await request(token));
+  const second = await dpopUser(await request(token, "/api/tasks"));
+  assertEquals(first, second);
 });
 
 Deno.test("a token bound to another key is refused", async () => {
@@ -47,8 +27,8 @@ Deno.test("a token bound to another key is refused", async () => {
     cnf: { jkt: theirs.thumbprint },
   });
   await assertRejects(
-    async () => signIn(await mine.request(token)),
-    SignInError,
+    async () => dpopUser(await mine.request(token)),
+    AuthError,
   );
 });
 
@@ -58,29 +38,32 @@ Deno.test("a token from another issuer is refused", async () => {
     { sub: "user-3", cnf: { jkt: thumbprint } },
     "https://evil.example",
   );
-  await assertRejects(async () => signIn(await request(token)), SignInError);
+  await assertRejects(async () => dpopUser(await request(token)), AuthError);
 });
 
-Deno.test("a replayed sign-in request is refused", async () => {
+Deno.test("a replayed request is refused", async () => {
   const { thumbprint, request } = await browser();
   const token = await idpToken({ sub: "user-4", cnf: { jkt: thumbprint } });
   const first = await request(token);
-  await signIn(first.clone());
-  await assertRejects(() => signIn(first), SignInError);
+  await dpopUser(first.clone());
+  await assertRejects(() => dpopUser(first), AuthError);
+});
+
+Deno.test("a proof for another URL is refused", async () => {
+  const { thumbprint, request } = await browser();
+  const token = await idpToken({ sub: "user-6", cnf: { jkt: thumbprint } });
+  const proofFor = await request(token, "/api/me");
+  const elsewhere = new Request(`${RP_ORIGIN}/api/tasks`, {
+    headers: proofFor.headers,
+  });
+  await assertRejects(() => dpopUser(elsewhere), AuthError);
 });
 
 Deno.test("a request without a token is refused", async () => {
   await assertRejects(
-    () => signIn(new Request(`${RP_ORIGIN}/auth/session`, { method: "POST" })),
-    SignInError,
+    () => dpopUser(new Request(`${RP_ORIGIN}/api/me`)),
+    AuthError,
   );
-});
-
-Deno.test("a forged cookie is nobody", async () => {
-  const user = await currentUser(
-    new Request(RP_ORIGIN, { headers: { cookie: "tindone_session=user-1" } }),
-  );
-  assertEquals(user, null);
 });
 
 Deno.test({ name: "teardown", fn: shutdown, sanitizeResources: false });

@@ -21,7 +21,6 @@
     "@remix-run/render-middleware": "npm:@remix-run/render-middleware@^0.3.1",
     "@remix-run/ui": "npm:@remix-run/ui@^0.10.0",
     "@remix-run/data-table": "npm:@remix-run/data-table@^1.0.0",
-    "@remix-run/cookie": "npm:@remix-run/cookie@^0.7.0",
     "@remix-kbn/assets-deno": "jsr:@remix-kbn/assets-deno@^0.8.0",
     "@remix-kbn/data-table-d1": "jsr:@remix-kbn/data-table-d1@^0.1.0",
     "@kuboon/dpop": "jsr:@kuboon/dpop@^0.2.0",

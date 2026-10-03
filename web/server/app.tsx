@@ -6,15 +6,15 @@
  * the router throws while it is being built, rather than serving an app with a hole in it.
  *
  * Pages are ordinary Remix components in `client/pages/`, rendered into `client/layout.tsx` by
- * `context.render` from the `render({ assets })` middleware. Where a page needs something only the
- * server knows — the user's tasks, their API token, the IdP's origin — it is handed in as props.
+ * `context.render` from the `render({ assets })` middleware. A page depends on nothing about who
+ * asks for it — the only server value it is handed is the IdP's origin — so every page is the same
+ * HTML for everyone. `build.ts` renders each one ahead of time into Static Assets, where Cloudflare
+ * serves and caches it without running the Worker. The islands on a page fetch the user's data
+ * from `/api/…` once they are in the browser.
  *
- * Two kinds of caller, two ways of knowing who they are:
- *
- * - **Pages and their forms** read the session cookie (`auth.ts`). A form posts, the action does
- *   the work, and the answer is a `303` back to a page.
- * - **`/api/…`** is for scripts, authorized by the user's API token as `Authorization: Bearer
- *   <token>`. The swipe deck uses the same endpoints, so a swipe and a `curl` are one code path.
+ * `/api/…` knows who is calling from the request alone (`auth.ts`): a script sends its API token
+ * as `Authorization: Bearer <token>`, the browser id.kbn.one's token and a DPoP proof. The swipe
+ * deck and a `curl` hit the same endpoints, so they are one code path.
  *
  * What differs between hosts is only how the client bundle is found ({@link Scripts}): `router.tsx`
  * compiles it on startup for `deno serve`, and `worker.ts` reads the manifest `build.ts` wrote.
@@ -32,11 +32,9 @@ import type { RemixNode } from "@remix-run/ui";
 import { hastToRemix } from "@kuboon/md/hast_to_remix.ts";
 
 import {
-  currentUser,
+  AuthError,
+  dpopUser,
   rotateApiToken,
-  signIn,
-  SignInError,
-  signOut,
   type User,
   userByToken,
 } from "./auth.ts";
@@ -52,7 +50,6 @@ import {
   doneTasks,
   findTask,
   isOpenList,
-  listCounts,
   TaskError,
   taskHistory,
   tasksInList,
@@ -65,10 +62,9 @@ import { routes } from "../client/routes.ts";
 import { Callback } from "../client/pages/callback.tsx";
 import { Doc as DocPage } from "../client/pages/doc.tsx";
 import { Done } from "../client/pages/done.tsx";
-import { Home } from "../client/pages/home.tsx";
-import { Landing } from "../client/pages/landing.tsx";
 import { Swipe } from "../client/pages/swipe.tsx";
-import { TaskPage } from "../client/pages/task.tsx";
+import { HomeApp } from "../client/islands/home_app.tsx";
+import { TaskApp } from "../client/islands/task_app.tsx";
 
 function makeRouter(scripts: Scripts) {
   return createRouter({ middleware: [render({ assets: scripts })] });
@@ -106,7 +102,11 @@ interface PageOptions {
   hydrate: boolean;
 }
 
-/** Renders a page into the shell. Pages are per-user, so no shared cache may keep one. */
+/**
+ * Renders a page into the shell. The same for everyone, so any cache may keep it — but only until
+ * it checks again: a page names the client bundle's hashed URLs, which a deploy replaces.
+ * (Prerendered pages are served by Static Assets, which revalidates them the same way.)
+ */
 function page(
   context: AppContext,
   options: PageOptions,
@@ -121,19 +121,8 @@ function page(
       {body}
     </Layout>,
   );
-  response.headers.set("cache-control", "private, no-store");
+  response.headers.set("cache-control", "public, max-age=0, must-revalidate");
   return response;
-}
-
-function redirect(location: string, headers?: HeadersInit): Response {
-  const response = new Response(null, { status: 303, headers });
-  response.headers.set("location", location);
-  return response;
-}
-
-/** The signed-in user, or a redirect to the landing page for the action to return. */
-async function requireUser(context: AppContext): Promise<User | Response> {
-  return await currentUser(context.request) ?? redirect(routes.home.href());
 }
 
 function absolute(context: AppContext, path: string): string {
@@ -154,100 +143,45 @@ function apiError(error: unknown): Response {
   });
 }
 
-function formError(error: unknown): Response {
-  if (error instanceof TaskError) {
-    return new Response(error.message, { status: error.status });
-  }
-  throw error;
-}
-
-/** The API is a credential in a URL, not a cookie, so any origin may call it. */
+/** The API's credentials travel in headers, never in a cookie, so any origin may call it. */
 const CORS = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET, POST, PATCH, DELETE, OPTIONS",
-  "access-control-allow-headers": "authorization, content-type",
+  "access-control-allow-headers": "authorization, content-type, dpop",
 };
+
+/** For what the API answers about one user: no shared cache may keep it. */
+const PRIVATE = { ...CORS, "cache-control": "private, no-store" };
 
 // --- pages ----------------------------------------------------------------------
 
 const pages = createController(routes, {
   actions: {
-    async home(context) {
-      const user = await currentUser(context.request);
-      if (!user) {
-        return page(
-          context,
-          { title: APP_NAME, description: TAGLINE, hydrate: true },
-          <Landing idpOrigin={config().idpOrigin} />,
-        );
-      }
-      const tasks = await allTasks(user.id);
-      return page(
+    home: (context) =>
+      page(
         context,
-        { title: APP_NAME, hydrate: true },
-        <Home
-          counts={await listCounts(user.id)}
-          tasks={tasks.map(({ id, content, list, created_at, updated_at }) => ({
-            id,
-            content,
-            list,
-            created_at,
-            updated_at,
-          }))}
-          quickApiUrl={absolute(
-            context,
-            routes.api.create.href({ list: "inbox" }),
-          )}
-          apiToken={user.apiToken}
-          idpOrigin={config().idpOrigin}
-        />,
-      );
-    },
+        { title: APP_NAME, description: TAGLINE, hydrate: true },
+        <HomeApp idpOrigin={config().idpOrigin} />,
+      ),
 
-    async swipe(context) {
-      const user = await requireUser(context);
-      if (user instanceof Response) return user;
+    swipe(context) {
       const list = context.params.list;
       if (!SWIPE_LISTS.includes(list as never) || !isListName(list)) {
         return notFound();
       }
-      const from = context.url.searchParams.get("from");
-      const tasks = await tasksInList(user.id, list);
       return page(
         context,
         { title: `${list.toUpperCase()} — ${APP_NAME}`, hydrate: true },
-        <Swipe
-          tasks={tasks.map(({ id, content }) => ({ id, content }))}
-          list={list}
-          from={isListName(from) ? from : null}
-          token={user.apiToken}
-        />,
+        <Swipe list={list} idpOrigin={config().idpOrigin} />,
       );
     },
 
-    async done(context) {
-      const user = await requireUser(context);
-      if (user instanceof Response) return user;
-      const tasks = await doneTasks(user.id);
-      return page(
+    done: (context) =>
+      page(
         context,
-        { title: `Done — ${APP_NAME}`, hydrate: false },
-        <Done
-          tasks={tasks.map(({ id, content, updated_at }) => ({
-            id,
-            content,
-            updated_at,
-          }))}
-        />,
-      );
-    },
-
-    async rotateToken(context) {
-      const user = await requireUser(context);
-      if (user instanceof Response) return user;
-      await rotateApiToken(user.id);
-      return redirect(routes.home.href());
-    },
+        { title: `Done — ${APP_NAME}`, hydrate: true },
+        <Done idpOrigin={config().idpOrigin} />,
+      ),
 
     doc(context) {
       const doc = Object.hasOwn(docs, context.params.slug)
@@ -273,86 +207,16 @@ const pages = createController(routes, {
   },
 });
 
-// --- tasks: the task page, and the forms on the pages ---------------------------
+// --- tasks: one page for every task ---------------------------------------------
 
 const taskController = createController(routes.tasks, {
   actions: {
-    async create(context) {
-      const user = await requireUser(context);
-      if (user instanceof Response) return user;
-      const form = await context.request.formData();
-      try {
-        await createTask(user.id, "inbox", form.get("content"));
-      } catch (error) {
-        return formError(error);
-      }
-      return redirect(routes.home.href());
-    },
-
-    async show(context) {
-      const task = await findTask(context.params.taskId);
-      if (!task) return notFound();
-      const user = await currentUser(context.request);
-      const owner = user?.id === task.user_id ? user : null;
-      const logs = await taskHistory(task.id);
-      return page(
+    show: (context) =>
+      page(
         context,
-        {
-          title: `${task.content} | ${APP_NAME}`,
-          description: `List: ${task.list.toUpperCase()}`,
-          hydrate: owner !== null,
-        },
-        <TaskPage
-          task={{ id: task.id, content: task.content, list: task.list }}
-          logs={logs.map(({ id, from_list, to_list, created_at }) => ({
-            id,
-            from_list,
-            to_list,
-            created_at,
-          }))}
-          api={owner
-            ? {
-              url: absolute(
-                context,
-                routes.api.update.href({ taskId: task.id }),
-              ),
-              token: owner.apiToken,
-            }
-            : null}
-        />,
-      );
-    },
-
-    async update(context) {
-      const user = await requireUser(context);
-      if (user instanceof Response) return user;
-      const { taskId } = context.params;
-      const form = await context.request.formData();
-      const list = form.get("list");
-      const content = form.get("content");
-      try {
-        await updateTask(user.id, taskId, {
-          list: isListName(list) ? list : undefined,
-          content: typeof content === "string" ? content : undefined,
-          push: false,
-        }, absolute(context, routes.tasks.show.href({ taskId })));
-      } catch (error) {
-        return formError(error);
-      }
-      return redirect(routes.tasks.show.href({ taskId }));
-    },
-
-    async deleteLog(context) {
-      const user = await requireUser(context);
-      if (user instanceof Response) return user;
-      const { taskId, logId } = context.params;
-      try {
-        await deleteLog(user.id, taskId, logId);
-      } catch (error) {
-        return formError(error);
-      }
-      return redirect(routes.tasks.show.href({ taskId }));
-    },
+        { title: `Task — ${APP_NAME}`, hydrate: true },
+        <TaskApp idpOrigin={config().idpOrigin} />,
+      ),
   },
 });
 
@@ -366,41 +230,31 @@ const authController = createController(routes.auth, {
         { title: `Signing in — ${APP_NAME}`, hydrate: true },
         <Callback idpOrigin={config().idpOrigin} />,
       ),
-
-    async session(context) {
-      try {
-        const cookie = await signIn(context.request);
-        return new Response(null, {
-          status: 204,
-          headers: { "set-cookie": cookie },
-        });
-      } catch (error) {
-        if (error instanceof SignInError) {
-          return new Response(error.message, { status: 401 });
-        }
-        throw error;
-      }
-    },
-
-    async logout() {
-      return new Response(null, {
-        status: 204,
-        headers: { "set-cookie": await signOut() },
-      });
-    },
   },
 });
 
-// --- api: for scripts, authorized by a bearer token --------------------------------
+// --- api: for scripts and for the islands ------------------------------------------
 
 /**
- * The user an API request is authorized as, from `Authorization: Bearer <token>`.
+ * The user an API request is made as: `Authorization: Bearer <api token>` from a script, or
+ * `Authorization: DPoP <id.kbn.one token>` with a proof from the browser (see `auth.ts`).
  *
  * @returns The user, or the `401` to answer with
  */
 async function apiUser(context: AppContext): Promise<User | Response> {
   const [scheme, token] = (context.request.headers.get("authorization") ?? "")
     .split(" ");
+  if (scheme?.toLowerCase() === "dpop") {
+    try {
+      return await dpopUser(context.request);
+    } catch (error) {
+      if (!(error instanceof AuthError)) throw error;
+      return Response.json({ error: error.message }, {
+        status: 401,
+        headers: { ...CORS, "www-authenticate": "DPoP" },
+      });
+    }
+  }
   const user = scheme?.toLowerCase() === "bearer" && token
     ? await userByToken(token)
     : null;
@@ -411,8 +265,62 @@ async function apiUser(context: AppContext): Promise<User | Response> {
   });
 }
 
+type ApiTask = Awaited<ReturnType<typeof allTasks>>[number];
+
+function taskJson({ id, content, list, created_at, updated_at }: ApiTask) {
+  return { id, content, list, created_at, updated_at };
+}
+
 const apiController = createController(routes.api, {
   actions: {
+    async me(context) {
+      const user = await apiUser(context);
+      if (user instanceof Response) return user;
+      return Response.json({ apiToken: user.apiToken }, { headers: PRIVATE });
+    },
+
+    async rotateToken(context) {
+      const user = await apiUser(context);
+      if (user instanceof Response) return user;
+      return Response.json({ apiToken: await rotateApiToken(user.id) }, {
+        headers: PRIVATE,
+      });
+    },
+
+    async all(context) {
+      const user = await apiUser(context);
+      if (user instanceof Response) return user;
+      return Response.json({
+        tasks: (await allTasks(user.id)).map(taskJson),
+      }, { headers: PRIVATE });
+    },
+
+    /**
+     * A task page is shareable by its link, so the task and its history answer to anyone. A
+     * credential, when sent, only decides `owner` — the controls the page shows.
+     */
+    async task(context) {
+      const task = await findTask(context.params.taskId);
+      if (!task) return apiError(new TaskError("Task not found", 404));
+      let owner = false;
+      if (context.request.headers.has("authorization")) {
+        const user = await apiUser(context);
+        if (user instanceof Response) return user;
+        owner = user.id === task.user_id;
+      }
+      const logs = await taskHistory(task.id);
+      return Response.json({
+        task: { id: task.id, content: task.content, list: task.list },
+        logs: logs.map(({ id, from_list, to_list, created_at }) => ({
+          id,
+          from_list,
+          to_list,
+          created_at,
+        })),
+        owner,
+      }, { headers: PRIVATE });
+    },
+
     async list(context) {
       const user = await apiUser(context);
       if (user instanceof Response) return user;
@@ -421,15 +329,9 @@ const apiController = createController(routes.api, {
       const found = list === "done"
         ? await doneTasks(user.id)
         : await tasksInList(user.id, list);
-      return Response.json({
-        tasks: found.map(({ id, content, list, created_at, updated_at }) => ({
-          id,
-          content,
-          list,
-          created_at,
-          updated_at,
-        })),
-      }, { headers: { ...CORS, "cache-control": "private, no-store" } });
+      return Response.json({ tasks: found.map(taskJson) }, {
+        headers: PRIVATE,
+      });
     },
 
     async create(context) {

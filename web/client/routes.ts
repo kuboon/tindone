@@ -6,13 +6,12 @@
  * is one edit. The pages link with them, and so do the islands: this file is plain data and safe to
  * put in a browser bundle.
  *
- * Three groups, by who is asking:
+ * Two groups:
  *
- * - **Pages and their forms** — a signed-in person, identified by the session cookie.
- * - **`auth`** — turning an id.kbn.one sign-in into that cookie, and back out.
- * - **`api`** — scripts. Authorized by the user's API token in an `Authorization: Bearer` header
- *   instead of a cookie, which is what makes them usable from `curl`: `POST /api/inbox` adds a
- *   task.
+ * - **Pages** — the same HTML for everyone, prerendered by `build.ts` and served as Static Assets.
+ *   Nothing in one depends on who is asking; the islands on it fetch the user's data from `api`.
+ * - **`api`** — JSON. A script authorizes with its API token (`Authorization: Bearer`); the
+ *   browser with id.kbn.one's token and a DPoP proof (`Authorization: DPoP`). See `server/auth.ts`.
  */
 
 import { del, get, patch, post, route } from "@remix-run/fetch-router/routes";
@@ -22,22 +21,24 @@ export const routes = route("", {
   swipe: get("/swipe/:list"),
   done: get("/done"),
   tasks: route("tasks", {
-    create: post("/"),
+    /** One shell for every task: the page reads the id from its own URL. */
     show: get("/:taskId"),
-    update: post("/:taskId"),
-    deleteLog: post("/:taskId/logs/:logId/delete"),
   }),
-  rotateToken: post("/settings/api-token"),
   /** `docs/<slug>.md`, rendered — `/docs/api` is the API reference. */
   doc: get("/docs/:slug"),
   auth: route("auth", {
     /** Where id.kbn.one sends the browser back to after `/authorize`. */
     callback: get("/callback"),
-    /** Exchanges the IdP's DPoP-bound token for the session cookie. */
-    session: post("/session"),
-    logout: post("/logout"),
   }),
   api: route("api", {
+    /** The caller's API token. */
+    me: get("/me"),
+    /** Replaces the API token. */
+    rotateToken: post("/me/token"),
+    /** Every task the caller has. */
+    all: get("/tasks"),
+    /** One task and its history — anyone with the link; `owner` says whether it is the caller's. */
+    task: get("/tasks/:taskId"),
     list: get("/:list"),
     create: post("/:list"),
     update: patch("/tasks/:taskId"),

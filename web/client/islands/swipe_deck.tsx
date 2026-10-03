@@ -8,9 +8,11 @@ import {
   type SerializableValue,
 } from "@remix-run/ui";
 
-import type { ListName } from "../lists.ts";
+import { isListName, type ListName } from "../lists.ts";
 import { routes } from "../routes.ts";
 import { color, radius } from "../tokens.ts";
+import { ApiError, readJson } from "./_lib/api.ts";
+import { sessionStore } from "./_lib/session.ts";
 
 type Direction = "right" | "left" | "up" | "down";
 
@@ -21,12 +23,8 @@ export interface DeckTask {
 }
 
 export interface SwipeDeckProps {
-  tasks: DeckTask[];
   list: ListName;
-  /** The list the user swiped through just before this one, for the entrance animation. */
-  from: ListName | null;
-  /** The user's API token: moves go through the same API a script would use. */
-  token: string;
+  idpOrigin: string;
   [key: string]: SerializableValue;
 }
 
@@ -96,7 +94,10 @@ function isUrl(content: string): boolean {
  * Drag a card — or press an arrow key — right, left, down or up to move it; the card flies off,
  * the next one is already there, and the move is sent in the background. When the deck runs out
  * it moves on to the next list (inbox → now → waiting → next → home), and the next deck slides in
- * from the side its cards were swiped to. Escape goes back home.
+ * from the side its cards were swiped to (`?from=<list>`). Escape goes back home.
+ *
+ * The page is the same HTML for everyone, so the cards are fetched here, from the API, as the
+ * signed-in user — and fetched again when a frame navigation hands this island the next list.
  *
  * Dragging writes the card's transform straight to the element instead of re-rendering on every
  * pointer move; a re-render only happens when a card is committed.
@@ -110,8 +111,43 @@ export const SwipeDeck = clientEntry(
     let drag: { id: number; x0: number; y0: number; moved: boolean } | null =
       null;
 
+    /** The cards, once fetched; `null` while they are on their way. */
+    let loaded: DeckTask[] | null = null;
+    /** Which list `loaded` is — or is being fetched — for. */
+    let loadedFor: ListName | null = null;
+    /** The deck swiped through before this one, from `?from=`. */
+    let from: ListName | null = null;
+
     const list = () => handle.props.list;
-    const tasks = () => handle.props.tasks;
+    const tasks = () => loaded ?? [];
+
+    const load = async (target: ListName) => {
+      loadedFor = target;
+      loaded = null;
+      const param = new URLSearchParams(location.search).get("from");
+      from = isListName(param) ? param : null;
+      try {
+        await sessionStore.load(handle.props.idpOrigin);
+        const { tasks } = await readJson<{ tasks: DeckTask[] }>(
+          await sessionStore.api(routes.api.list.href({ list: target })),
+        );
+        if (loadedFor !== target) return;
+        loaded = tasks.map(({ id, content }) => ({ id, content }));
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          location.replace(routes.home.href());
+          return;
+        }
+        console.error(error);
+        if (loadedFor !== target) return;
+        loaded = [];
+      }
+      index = 0;
+      busy = false;
+      entered = false;
+      handle.update();
+      handle.queueTask(enter);
+    };
 
     const setPose = (x: number, y: number) => {
       if (!card) return;
@@ -150,17 +186,11 @@ export const SwipeDeck = clientEntry(
       const task = tasks()[index];
       if (!task) return;
       const target = direction === "up" ? "done" : TARGETS[list()]![direction];
-      fetch(
-        routes.api.update.href({ taskId: task.id }),
-        {
-          method: "PATCH",
-          headers: {
-            authorization: `Bearer ${handle.props.token}`,
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({ list: target, push: false }),
-        },
-      ).catch((error) => console.error(error));
+      sessionStore.api(routes.api.update.href({ taskId: task.id }), {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ list: target, push: false }),
+      }).then(readJson).catch((error) => console.error(error));
 
       index++;
       busy = false;
@@ -268,14 +298,11 @@ export const SwipeDeck = clientEntry(
      */
     let deck: Element | null = null;
     let entered = false;
-    let seen = handle.props.tasks;
 
     const enter = () => {
       if (entered || !deck) return;
       entered = true;
-      const offset = handle.props.from && handle.props.from !== list()
-        ? ENTRANCE[list()]
-        : undefined;
+      const offset = from && from !== list() ? ENTRANCE[list()] : undefined;
       if (!offset) return;
       deck.animate([
         {
@@ -287,15 +314,14 @@ export const SwipeDeck = clientEntry(
     };
 
     return () => {
-      if (handle.props.tasks !== seen) {
-        seen = handle.props.tasks;
-        index = 0;
-        busy = false;
-        entered = false;
-        handle.queueTask(enter);
+      if (typeof document !== "undefined" && loadedFor !== list()) {
+        void load(list());
+      }
+      const home = routes.home.href();
+      if (loaded === null) {
+        return <div mix={emptyStyle} aria-busy="true"></div>;
       }
       const task = tasks()[index];
-      const home = routes.home.href();
 
       if (!task) {
         return (
