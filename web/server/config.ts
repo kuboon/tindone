@@ -24,7 +24,7 @@ export interface Config {
   readonly sessionSecrets: readonly string[];
   /**
    * The SQLite file standing in for D1 under `deno serve` (`DATABASE_FILE`, default
-   * `web/data/app.db`). Unused on Workers, where the database is the `DB` binding.
+   * `web/data/app.db`). Empty on Workers, where the database is the `DB` binding.
    */
   readonly databaseFile: string;
 }
@@ -68,7 +68,9 @@ function load(): Config {
     rpOrigin: read("RP_ORIGIN").replace(/\/+$/, ""),
     rpSigningKeyJwk: read("RP_SIGNING_KEY_JWK"),
     sessionSecrets: secrets,
-    databaseFile: read("DATABASE_FILE") || localDatabase(),
+    // Only Deno has a file to default to: in a Worker's single bundle, `import.meta.url` does not
+    // resolve a relative path, and the database is the binding anyway.
+    databaseFile: read("DATABASE_FILE") || (source ? "" : localDatabase()),
   };
 }
 
