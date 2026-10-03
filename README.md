@@ -177,11 +177,12 @@ One-time setup:
 1. **Connect the repository**: the `tindone` Worker → Settings → Build → connect `kuboon/tindone`,
    production branch `main`, and set:
 
-   | Setting        | Value                                                                                         |
-   | -------------- | --------------------------------------------------------------------------------------------- |
-   | Root directory | `web`                                                                                         |
-   | Build command  | `curl -fsSL https://deno.land/install.sh \| sh -s -- -y && $HOME/.deno/bin/deno task build` |
-   | Deploy command | `$HOME/.deno/bin/deno task deploy`                                                            |
+   | Setting         | Value                                                                                       |
+   | --------------- | ------------------------------------------------------------------------------------------- |
+   | Root directory  | `web`                                                                                       |
+   | Build command   | `curl -fsSL https://deno.land/install.sh \| sh -s -- -y && $HOME/.deno/bin/deno task build` |
+   | Deploy command  | `$HOME/.deno/bin/deno task deploy`                                                          |
+   | Preview command | `$HOME/.deno/bin/deno task deploy:preview`                                                  |
 
    `deno task deploy` runs `deno task db migrate --remote` against the D1 database `tindone` (its
    id is in `web/wrangler.jsonc` and in the task), then `wrangler deploy` — the migration first,
@@ -189,12 +190,25 @@ One-time setup:
    API token (`CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID`, provided by Workers Builds). If the
    migration is refused for lack of permission, give that token *D1 Edit* under Settings → Build →
    API token.
-2. **Worker secrets**, from `web/`:
+
+   Branches other than `main` get a [Worker Preview](https://developers.cloudflare.com/workers/previews/)
+   (enable Preview Builds under Branch control). `deno task deploy:preview` migrates the D1 database
+   `tindone-preview`, then runs `wrangler preview`. Previews take their settings from the `previews`
+   block of `web/wrangler.jsonc`, not from production: their `DB` is `tindone-preview`, shared by
+   every branch. When two branches' migrations collide there, rebuild it from the branch you are
+   testing: `deno task db reset --force --remote --database-id e5444ee5-209c-4e0f-8945-6fd986eba690`.
+2. **Worker secrets**, from `web/` — production, and the Previews base config that every new
+   Preview starts with:
 
    ```sh
    npx wrangler secret put SESSION_SECRET
    npx wrangler secret put RP_SIGNING_KEY_JWK
+   npx wrangler preview base-config secret put SESSION_SECRET
+   npx wrangler preview base-config secret put RP_SIGNING_KEY_JWK
    ```
+
+   Signing in on a Preview needs its origin on id.kbn.one's `AUTHORIZE_WHITELIST`, and push needs
+   `RP_ORIGIN`, which Previews leave unset.
 
 3. **`RP_ORIGIN`**: set it under `vars` in `web/wrangler.jsonc` to the Worker's URL
    (`https://tindone.<subdomain>.workers.dev` or a custom domain), and add the same origin to
