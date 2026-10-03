@@ -22,9 +22,11 @@ export interface Config {
   readonly rpSigningKeyJwk: string;
   /** Secrets signing the session cookie, newest first (comma-separated in the environment). */
   readonly sessionSecrets: readonly string[];
-  /** libSQL URL: `libsql://…` for Turso, `file:…` for a local database (Deno only). */
-  readonly databaseUrl: string;
-  readonly databaseAuthToken: string;
+  /**
+   * The SQLite file standing in for D1 under `deno serve` (`DATABASE_FILE`, default
+   * `web/data/app.db`). Unused on Workers, where the database is the `DB` binding.
+   */
+  readonly databaseFile: string;
 }
 
 type EnvSource = Record<string, unknown>;
@@ -66,17 +68,15 @@ function load(): Config {
     rpOrigin: read("RP_ORIGIN").replace(/\/+$/, ""),
     rpSigningKeyJwk: read("RP_SIGNING_KEY_JWK"),
     sessionSecrets: secrets,
-    databaseUrl: read("TURSO_DATABASE_URL") || localDatabase(),
-    databaseAuthToken: read("TURSO_AUTH_TOKEN"),
+    databaseFile: read("DATABASE_FILE") || localDatabase(),
   };
 }
 
 /** Development's default: the same file `deno task db` migrates, `web/data/app.db`. */
 function localDatabase(): string {
-  if (source) throw new Error("TURSO_DATABASE_URL is not set");
-  return `file:${
-    decodeURIComponent(new URL("../data/app.db", import.meta.url).pathname)
-  }`;
+  return decodeURIComponent(
+    new URL("../data/app.db", import.meta.url).pathname,
+  );
 }
 
 /** The configuration, read from the environment on first use. */

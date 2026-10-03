@@ -31,6 +31,9 @@ Deno.test("content must be 1-100 characters", async () => {
 Deno.test("moving a task logs it, and a swipe back re-queues it", async () => {
   const first = await tasks.createTask("alice", "now", "first");
   const second = await tasks.createTask("alice", "now", "second");
+  // Order is by `updated_at` in milliseconds; an in-memory database is fast enough to move the
+  // task within the millisecond it was created in, which would tie the two.
+  await new Promise((resolve) => setTimeout(resolve, 2));
   await tasks.updateTask("alice", first, { list: "now", push: false }, "");
   const order = (await tasks.tasksInList("alice", "now")).map((t) => t.id);
   assertEquals(order.indexOf(second) < order.indexOf(first), true);

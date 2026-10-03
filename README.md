@@ -6,23 +6,25 @@ Swipe your way to GTD nirvana.
 
 - **Runtime**: [Deno](https://deno.com) 2.x for development and builds;
   [Cloudflare Workers](https://workers.cloudflare.com) in production
-- **Framework**: [Remix v3](https://remix.run) — `@remix-run/fetch-router` + `@remix-run/ui`
-  (server-rendered pages, hydrated islands). Structure follows
-  [remix3-ssg-gh-pages](https://github.com/kuboon/remix3-ssg-gh-pages), served live instead of
-  crawled into static files.
+- **Framework**: [Remix v3](https://remix.run) — `@remix-run/fetch-router` +
+  `@remix-run/ui` (server-rendered pages, hydrated islands). Structure follows
+  [remix3-ssg-gh-pages](https://github.com/kuboon/remix3-ssg-gh-pages), served
+  live instead of crawled into static files.
 - **Sign-in**: [id.kbn.one](https://id.kbn.one) (passkeys, DPoP-bound sessions)
 - **Push notifications**: delivered by id.kbn.one
-- **Database**: Turso (libSQL) via `@remix-run/data-table` +
-  [`@remix-kbn/data-table-sqlite-turso`](https://jsr.io/@remix-kbn/data-table-sqlite-turso)
+- **Database**: [Cloudflare D1](https://developers.cloudflare.com/d1/) via
+  `@remix-run/data-table` +
+  [`@remix-kbn/data-table-d1`](https://jsr.io/@remix-kbn/data-table-d1)
 
 ## Features
 
 - **GTD Lists**: Inbox, Now, Next, Waiting, Done.
-- **Tinder-like Swipe**: process a list as a card deck — drag or use the arrow keys. Right → Now,
-  left → Next, down → Waiting, up → Done. An empty deck moves on to the next list
-  (inbox → now → waiting → next → home).
+- **Tinder-like Swipe**: process a list as a card deck — drag or use the arrow
+  keys. Right → Now, left → Next, down → Waiting, up → Done. An empty deck moves
+  on to the next list (inbox → now → waiting → next → home).
 - **Task Log**: every move is recorded; log lines can be deleted.
-- **Remote Update**: copy a curl / wget / `fetch` snippet to add or move tasks from a terminal.
+- **Remote Update**: copy a curl / wget / `fetch` snippet to add or move tasks
+  from a terminal.
 - **Push Notifications**: a move made through the API notifies your devices.
 - **Export**: copy every task as Markdown or JSON.
 
@@ -52,49 +54,57 @@ web/
 
 ### Two hosts, one app
 
-`server/app.tsx` is the whole app and runs unchanged on both. What differs is how each host finds
-things that are not code:
+`server/app.tsx` is the whole app and runs unchanged on both. What differs is
+how each host finds things that are not code:
 
-|                   | `deno task dev`                          | Cloudflare Workers                                         |
-| ----------------- | ---------------------------------------- | ---------------------------------------------------------- |
-| Environment       | `Deno.env`                               | the Worker's `env` (`wrangler.jsonc` vars + secrets)       |
-| Client bundle     | compiled on startup (`Deno.bundle`)      | prebuilt into `dist/public/assets/` + `dist/manifest.json` |
-| Static files      | served by the router                     | Workers Static Assets (`dist/public/`)                     |
-| Database          | `web/data/app.db` (or `TURSO_*`)         | Turso over HTTP (`@libsql/client/web`)                     |
+|               | `deno task dev`                     | Cloudflare Workers                                         |
+| ------------- | ----------------------------------- | ---------------------------------------------------------- |
+| Environment   | `Deno.env`                          | the Worker's `env` (`wrangler.jsonc` vars + secrets)       |
+| Client bundle | compiled on startup (`Deno.bundle`) | prebuilt into `dist/public/assets/` + `dist/manifest.json` |
+| Static files  | served by the router                | Workers Static Assets (`dist/public/`)                     |
+| Database      | `web/data/app.db` (`createLocalD1`) | the `DB` D1 binding                                        |
 
-Islands name themselves `file://client/islands/<name>.tsx#<Export>` in `clientEntry()` rather than
-`import.meta.url`: the Worker is a single minified bundle, where every module shares one
-`import.meta.url` and function names are mangled. `server/scripts.ts` resolves those ids on both
-hosts.
+Islands name themselves `file://client/islands/<name>.tsx#<Export>` in
+`clientEntry()` rather than `import.meta.url`: the Worker is a single minified
+bundle, where every module shares one `import.meta.url` and function names are
+mangled. `server/scripts.ts` resolves those ids on both hosts.
 
 ## How sign-in works
 
-1. The browser creates a DPoP key (`@kuboon/dpop`, kept in IndexedDB) and goes to
+1. The browser creates a DPoP key (`@kuboon/dpop`, kept in IndexedDB) and goes
+   to
    `https://id.kbn.one/authorize?dpop_jkt=<thumbprint>&redirect_uri=<origin>/auth/callback`.
-2. id.kbn.one signs the user in with a passkey and binds its session to that key.
-3. Back on `/auth/callback`, the browser fetches `https://id.kbn.one/session` with a DPoP proof and
-   receives `{ userId, jws }` — a token whose `cnf.jkt` is the key's thumbprint.
-4. It posts the token to `/auth/session` as `Authorization: DPoP <jws>` with a DPoP proof. The
-   server verifies the token against id.kbn.one's JWKS and that the proof's key matches `cnf.jkt`,
-   then sets a signed, HttpOnly session cookie that the pages read.
+2. id.kbn.one signs the user in with a passkey and binds its session to that
+   key.
+3. Back on `/auth/callback`, the browser fetches `https://id.kbn.one/session`
+   with a DPoP proof and receives `{ userId, jws }` — a token whose `cnf.jkt` is
+   the key's thumbprint.
+4. It posts the token to `/auth/session` as `Authorization: DPoP <jws>` with a
+   DPoP proof. The server verifies the token against id.kbn.one's JWKS and that
+   the proof's key matches `cnf.jkt`, then sets a signed, HttpOnly session
+   cookie that the pages read.
 
 ## API
 
-Every user has an API token, sent as `Authorization: Bearer <token>`, so scripts need no sign-in.
-The token and ready-to-copy snippets are shown on the home and task pages, and the token can be
-regenerated from the home page.
+Every user has an API token, sent as `Authorization: Bearer <token>`, so scripts
+need no sign-in. The token and ready-to-copy snippets are shown on the home and
+task pages, and the token can be regenerated from the home page.
 
 The full reference is [`web/docs/api.md`](web/docs/api.md), served as a page at
-[`/docs/api`](https://gtd.kbn.one/docs/api). Every `web/docs/<slug>.md` is converted with
-[`@kuboon/md`](https://jsr.io/@kuboon/md) ahead of time — on startup in development, into
-`dist/docs.json` by `deno task build` — so the Worker only renders the result.
+[`/docs/api`](https://gtd.kbn.one/docs/api). Every `web/docs/<slug>.md` is
+converted with [`@kuboon/md`](https://jsr.io/@kuboon/md) ahead of time — on
+startup in development, into `dist/docs.json` by `deno task build` — so the
+Worker only renders the result.
 
-- `GET /api/:list` — the tasks in a list (`inbox` / `now` / `next` / `waiting` / `done`).
-- `POST /api/:list` — add a task (`list`: `inbox` / `now` / `next` / `waiting`). Body is the text
-  itself (`text/plain`) or `{ "content": "…" }` (JSON). Content is 1–100 chars.
+- `GET /api/:list` — the tasks in a list (`inbox` / `now` / `next` / `waiting` /
+  `done`).
+- `POST /api/:list` — add a task (`list`: `inbox` / `now` / `next` / `waiting`).
+  Body is the text itself (`text/plain`) or `{ "content": "…" }` (JSON). Content
+  is 1–100 chars.
 - `PATCH /api/tasks/:taskId` — `{ "list": "done" }` and/or `{ "content": "…" }`.
-  - `push` (default `true`): send a push notification for a move. `{ "list": "now", "push": false }`
-    skips it; the app's own screens always do.
+  - `push` (default `true`): send a push notification for a move.
+    `{ "list": "now", "push": false }` skips it; the app's own screens always
+    do.
 - `DELETE /api/tasks/:taskId/logs/:logId` — delete one history line.
 
 A missing or unknown token is a `401`.
@@ -106,26 +116,28 @@ curl -X POST https://gtd.kbn.one/api/inbox -H "Authorization: Bearer <token>" \
 
 ## Push notifications
 
-Subscriptions live on id.kbn.one, not here. The bell on the home page registers the device with
-`https://id.kbn.one/push/*` (DPoP-bound) and `/sw.js` shows what arrives. To notify a user, the
-server calls id.kbn.one's `POST /rp/notifications` with a `private_key_jwt` client assertion signed
-by `RP_SIGNING_KEY_JWK`, whose public half is served at `/.well-known/jwks.json`.
+Subscriptions live on id.kbn.one, not here. The bell on the home page registers
+the device with `https://id.kbn.one/push/*` (DPoP-bound) and `/sw.js` shows what
+arrives. To notify a user, the server calls id.kbn.one's
+`POST /rp/notifications` with a `private_key_jwt` client assertion signed by
+`RP_SIGNING_KEY_JWK`, whose public half is served at `/.well-known/jwks.json`.
 
 The old VAPID-based notifications are gone; devices must be registered again.
 
 ## Setup
 
-1. **id.kbn.one**: add this app's origin (`RP_ORIGIN`) to id.kbn.one's `AUTHORIZE_WHITELIST`.
-   That is what allows the `/authorize` redirect back here and server-sent notifications.
+1. **id.kbn.one**: add this app's origin (`RP_ORIGIN`) to id.kbn.one's
+   `AUTHORIZE_WHITELIST`. That is what allows the `/authorize` redirect back
+   here and server-sent notifications.
 2. **Environment**
 
-   | Name                                     | Meaning                                                                                                     |
-   | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-   | `RP_ORIGIN`                              | Public origin of this app, e.g. `https://tindone.example`. Required for push; also used for absolute URLs.  |
-   | `SESSION_SECRET`                         | Secret(s) signing the session cookie, comma-separated, newest first. A dev default is used when unset.      |
-   | `RP_SIGNING_KEY_JWK`                     | ES256 private key (JWK JSON) for client assertions. Generated per process when unset — set it in production. |
-   | `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` | Turso database. In development, defaults to the local file `web/data/app.db`; required on Workers.          |
-   | `IDP_ORIGIN`                             | Defaults to `https://id.kbn.one`.                                                                           |
+   | Name                 | Meaning                                                                                                            |
+   | -------------------- | ------------------------------------------------------------------------------------------------------------------ |
+   | `RP_ORIGIN`          | Public origin of this app, e.g. `https://tindone.example`. Required for push; also used for absolute URLs.         |
+   | `SESSION_SECRET`     | Secret(s) signing the session cookie, comma-separated, newest first. A dev default is used when unset.             |
+   | `RP_SIGNING_KEY_JWK` | ES256 private key (JWK JSON) for client assertions. Generated per process when unset — set it in production.       |
+   | `DATABASE_FILE`      | Development only: the SQLite file standing in for D1. Defaults to `web/data/app.db`. Workers use the `DB` binding. |
+   | `IDP_ORIGIN`         | Defaults to `https://id.kbn.one`.                                                                                  |
 
    Generate a signing key with:
 
@@ -133,12 +145,25 @@ The old VAPID-based notifications are gone; devices must be registered again.
    deno eval 'const k = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign"]); console.log(JSON.stringify(await crypto.subtle.exportKey("jwk", k.privateKey)))'
    ```
 
-3. **Database** — the first migration drops the old Next.js-era tables and starts empty:
+3. **Database** — the first migration drops the old Next.js-era tables and
+   starts empty:
 
    ```sh
    cd web
-   deno task db migrate      # uses TURSO_DATABASE_URL / TURSO_AUTH_TOKEN
+   deno task db migrate             # web/data/app.db, for `deno task dev`
+   deno task db migrate --remote    # the D1 database; deploy.yml does this on every deploy
    ```
+
+   `--remote` reads `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` and
+   `CLOUDFLARE_D1_DATABASE_ID` (the `database_id` in `web/wrangler.jsonc`).
+   Migrations are `@remix-run/data-table`'s
+   (`db/migrations/<id>_<name>/up.sql`), journaled in `data_table_migrations` —
+   not Wrangler's `d1 migrations`.
+
+   D1 transactions queue their writes and commit them as one batch, so inside
+   `transaction()` a write cannot return rows (use `updateMany()`, not
+   `update()`) and a read must come before the first write. The local file
+   behaves the same way, so tests catch a mistake there.
 
 4. **Develop**
 
@@ -151,29 +176,32 @@ The old VAPID-based notifications are gone; devices must be registered again.
    npx wrangler dev  # run dist/ locally in workerd; put variables in web/.dev.vars
    ```
 
+   `wrangler dev` brings its own local D1, which starts empty. Give it the
+   schema with
+   `npx wrangler d1 execute tindone --local --file db/migrations/20260923000000_init/up.sql`.
+
    Local sign-in needs `http://localhost:8000` on id.kbn.one's whitelist.
 
 ## Deploy (Cloudflare Workers)
 
-`.github/workflows/deploy.yml` deploys `main` on every push: `deno task build`, then
-`deno task db migrate`, then `wrangler deploy` from `web/`.
+`.github/workflows/deploy.yml` deploys `main` on every push: `deno task build`,
+then `deno task db migrate --remote`, then `wrangler deploy` from `web/`.
 
 One-time setup:
 
-1. **Repository secrets** (Settings → Secrets and variables → Actions): `CLOUDFLARE_API_TOKEN` (a
-   token with *Edit Cloudflare Workers*), `CLOUDFLARE_ACCOUNT_ID`, `TURSO_DATABASE_URL`,
-   `TURSO_AUTH_TOKEN`.
+1. **Repository secrets** (Settings → Secrets and variables → Actions):
+   `CLOUDFLARE_API_TOKEN` (a token with _Edit Cloudflare Workers_ and _D1 Edit_)
+   and `CLOUDFLARE_ACCOUNT_ID`. The D1 database itself (`tindone`) already
+   exists; its id is in `web/wrangler.jsonc`.
 2. **Worker secrets**, from `web/`:
 
    ```sh
    npx wrangler secret put SESSION_SECRET
    npx wrangler secret put RP_SIGNING_KEY_JWK
-   npx wrangler secret put TURSO_DATABASE_URL
-   npx wrangler secret put TURSO_AUTH_TOKEN
    ```
 
-3. **`RP_ORIGIN`**: set it under `vars` in `web/wrangler.jsonc` to the Worker's URL
-   (`https://tindone.<subdomain>.workers.dev` or a custom domain), and add the same origin to
-   id.kbn.one's `AUTHORIZE_WHITELIST`.
+3. **`RP_ORIGIN`**: set it under `vars` in `web/wrangler.jsonc` to the Worker's
+   URL (`https://tindone.<subdomain>.workers.dev` or a custom domain), and add
+   the same origin to id.kbn.one's `AUTHORIZE_WHITELIST`.
 
 The Worker is about 100 KB gzipped, well within the free plan's 3 MB.

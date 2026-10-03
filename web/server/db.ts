@@ -5,19 +5,20 @@
  * `db/migrations/`, applied with `deno task db migrate`. The two are kept in step by hand — there is
  * no generator in either direction.
  *
- * Turso's client is asynchronous, which the stock SQLite adapter cannot drive, so the adapter is
- * `@remix-kbn/data-table-sqlite-turso`. A remote database is reached with `@libsql/client/web`,
- * which is plain `fetch` and runs on Workers as well as Deno; only a local `file:` database needs
- * the native client, and that is imported on demand, in development only.
+ * The database is Cloudflare D1, driven by `@remix-kbn/data-table-d1`. On Workers it is the `DB`
+ * binding, handed over by `worker.ts`. Under `deno serve` and in tests there is no binding, so a
+ * local SQLite file stands in through `createLocalD1()`, which behaves the way D1 does — including
+ * D1's transactions, which queue their writes and commit them as one batch: inside
+ * `transaction()`, write without `returning` (`updateMany()`, not `update()`) and read before the
+ * first write.
  */
 
 import { column as c, table } from "@remix-run/data-table";
 import {
-  createTursoDatabase,
-  type TursoDatabase,
-} from "@remix-kbn/data-table-sqlite-turso";
-import type { Client } from "@libsql/client";
-import { createClient as createWebClient } from "@libsql/client/web";
+  createD1Database,
+  type D1BackedDatabase,
+  type D1DatabaseBinding,
+} from "@remix-kbn/data-table-d1";
 
 import { config } from "./config.ts";
 
@@ -61,32 +62,33 @@ export const taskLogs = table({
   },
 });
 
-async function connect(): Promise<Client> {
-  const { databaseUrl, databaseAuthToken } = config();
-  const options = {
-    url: databaseUrl,
-    authToken: databaseAuthToken || undefined,
-  };
-  if (databaseUrl.startsWith("file:")) {
-    const path = databaseUrl.slice("file:".length);
-    const dir = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
-    if (dir) await Deno.mkdir(dir, { recursive: true });
-    // Named through a variable so the Worker bundle never pulls the native client in: a Worker only
-    // ever sees a remote URL, and the native module could not load there anyway.
-    const nativeClient = "@libsql/client";
-    const { createClient } = await import(
-      nativeClient
-    ) as typeof import("@libsql/client");
-    return createClient(options);
-  }
-  return createWebClient(options);
+let binding: D1DatabaseBinding | undefined;
+let database: Promise<D1BackedDatabase> | undefined;
+
+/**
+ * Hands the server the Worker's D1 binding. Without one, the database is a local file.
+ *
+ * @param d1 `env.DB`
+ */
+export function setDatabaseBinding(d1: D1DatabaseBinding): void {
+  binding = d1;
+  database = undefined;
 }
 
-let database: Promise<TursoDatabase> | undefined;
+async function connect(): Promise<D1DatabaseBinding> {
+  if (binding) return binding;
+  // Named through a variable so the Worker bundle never pulls in `node:sqlite`: a Worker always
+  // has its binding, and could not open a file anyway.
+  const local = "@remix-kbn/data-table-d1/node";
+  const { createLocalD1 } = await import(
+    local
+  ) as typeof import("@remix-kbn/data-table-d1/node");
+  return await createLocalD1(config().databaseFile);
+}
 
 /** The database, connected on first use. */
-export function getDb(): Promise<TursoDatabase> {
-  return database ??= connect().then(createTursoDatabase);
+export function getDb(): Promise<D1BackedDatabase> {
+  return database ??= connect().then((d1) => createD1Database(d1));
 }
 
 /** Milliseconds since the epoch — the unit every `*_at` column is in. */
