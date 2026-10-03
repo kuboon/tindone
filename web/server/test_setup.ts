@@ -28,10 +28,8 @@ export const RP_ORIGIN = "http://rp.test";
 Deno.env.set("IDP_ORIGIN", IDP_ORIGIN);
 Deno.env.set("RP_ORIGIN", RP_ORIGIN);
 Deno.env.set("SESSION_SECRET", "test-secret");
-// A throwaway file rather than `:memory:`: libSQL's client opens a fresh connection after each
-// transaction, and a fresh in-memory connection is a fresh, empty database.
-const dbDir = await Deno.makeTempDir({ prefix: "tindone-test-" });
-Deno.env.set("TURSO_DATABASE_URL", `file:${dbDir}/test.db`);
+// One connection for the whole run, so an in-memory database lives as long as the tests do.
+Deno.env.set("DATABASE_FILE", ":memory:");
 
 const db = await (await import("./db.ts")).getDb();
 for await (
@@ -65,5 +63,4 @@ export async function idpToken(
 /** Lets the test runner exit: the stand-in IdP is the only thing keeping it alive. */
 export async function shutdown(): Promise<void> {
   await idp.shutdown();
-  await Deno.remove(dbDir, { recursive: true }).catch(() => {});
 }

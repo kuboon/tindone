@@ -10,8 +10,11 @@
  * Static Assets, served before the Worker is asked.
  */
 
+import type { D1DatabaseBinding } from "@remix-kbn/data-table-d1";
+
 import { createApp, type Docs } from "./app.tsx";
 import { setEnv } from "./config.ts";
+import { setDatabaseBinding } from "./db.ts";
 import { type ScriptManifest, scriptsFromManifest } from "./scripts.ts";
 
 /**
@@ -26,6 +29,8 @@ export default function createWorker(manifest: ScriptManifest, docs: Docs) {
     fetch(request: Request, env: Record<string, unknown>): Promise<Response> {
       if (!app) {
         setEnv(env);
+        if (!env.DB) throw new Error("The DB binding (D1) is not configured");
+        setDatabaseBinding(env.DB as D1DatabaseBinding);
         app = createApp(scriptsFromManifest(manifest), { docs });
       }
       return app.fetch(request);

@@ -194,12 +194,14 @@ export async function updateTask(
   const task = await ownTask(userId, taskId);
   const t = now();
 
+  // `updateMany()`, not `update()`: a D1 transaction queues its writes until commit, so a write
+  // inside one cannot return the updated row that `update()` asks for.
   await (await getDb()).transaction(async (tx) => {
-    await tx.update(tasks, taskId, {
+    await tx.updateMany(tasks, {
       ...(update.list !== undefined ? { list: update.list } : {}),
       ...(content !== undefined ? { content } : {}),
       updated_at: t,
-    });
+    }, { where: eq(tasks.id, taskId) });
     if (update.list !== undefined) {
       await tx.create(taskLogs, {
         id: newId(),

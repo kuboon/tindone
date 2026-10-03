@@ -12,8 +12,8 @@ Swipe your way to GTD nirvana.
   crawled into static files.
 - **Sign-in**: [id.kbn.one](https://id.kbn.one) (passkeys, DPoP-bound sessions)
 - **Push notifications**: delivered by id.kbn.one
-- **Database**: Turso (libSQL) via `@remix-run/data-table` +
-  [`@remix-kbn/data-table-sqlite-turso`](https://jsr.io/@remix-kbn/data-table-sqlite-turso)
+- **Database**: [Cloudflare D1](https://developers.cloudflare.com/d1/) via `@remix-run/data-table` +
+  [`@remix-kbn/data-table-d1`](https://jsr.io/@remix-kbn/data-table-d1)
 
 ## Features
 
@@ -60,7 +60,7 @@ things that are not code:
 | Environment       | `Deno.env`                               | the Worker's `env` (`wrangler.jsonc` vars + secrets)       |
 | Client bundle     | compiled on startup (`Deno.bundle`)      | prebuilt into `dist/public/assets/` + `dist/manifest.json` |
 | Static files      | served by the router                     | Workers Static Assets (`dist/public/`)                     |
-| Database          | `web/data/app.db` (or `TURSO_*`)         | Turso over HTTP (`@libsql/client/web`)                     |
+| Database          | `web/data/app.db` (`createLocalD1`)      | the `DB` D1 binding                                        |
 
 Islands name themselves `file://client/islands/<name>.tsx#<Export>` in `clientEntry()` rather than
 `import.meta.url`: the Worker is a single minified bundle, where every module shares one
@@ -124,7 +124,7 @@ The old VAPID-based notifications are gone; devices must be registered again.
    | `RP_ORIGIN`                              | Public origin of this app, e.g. `https://tindone.example`. Required for push; also used for absolute URLs.  |
    | `SESSION_SECRET`                         | Secret(s) signing the session cookie, comma-separated, newest first. A dev default is used when unset.      |
    | `RP_SIGNING_KEY_JWK`                     | ES256 private key (JWK JSON) for client assertions. Generated per process when unset — set it in production. |
-   | `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` | Turso database. In development, defaults to the local file `web/data/app.db`; required on Workers.          |
+   | `DATABASE_FILE`                          | Development only: the SQLite file standing in for D1, default `web/data/app.db`. Workers use the `DB` binding. |
    | `IDP_ORIGIN`                             | Defaults to `https://id.kbn.one`.                                                                           |
 
    Generate a signing key with:
@@ -137,8 +137,18 @@ The old VAPID-based notifications are gone; devices must be registered again.
 
    ```sh
    cd web
-   deno task db migrate      # uses TURSO_DATABASE_URL / TURSO_AUTH_TOKEN
+   deno task db migrate             # web/data/app.db, for `deno task dev`
+   deno task db migrate --remote    # the D1 database; `deno task deploy` does this on every deploy
    ```
+
+   `--remote` reads `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_D1_DATABASE_ID`
+   (the `database_id` in `web/wrangler.jsonc`). Migrations are `@remix-run/data-table`'s
+   (`db/migrations/<id>_<name>/up.sql`), journaled in `data_table_migrations` — not Wrangler's
+   `d1 migrations`.
+
+   D1 transactions queue their writes and commit them as one batch, so inside `transaction()` a
+   write cannot return rows (use `updateMany()`, not `update()`) and a read must come before the
+   first write. The local file behaves the same way, so tests catch a mistake there.
 
 4. **Develop**
 
@@ -151,25 +161,39 @@ The old VAPID-based notifications are gone; devices must be registered again.
    npx wrangler dev  # run dist/ locally in workerd; put variables in web/.dev.vars
    ```
 
+   `wrangler dev` brings its own local D1, which starts empty. Give it the schema with
+   `npx wrangler d1 execute tindone --local --file db/migrations/20260923000000_init/up.sql`.
+
    Local sign-in needs `http://localhost:8000` on id.kbn.one's whitelist.
 
 ## Deploy (Cloudflare Workers)
 
-`.github/workflows/deploy.yml` deploys `main` on every push: `deno task build`, then
-`deno task db migrate`, then `wrangler deploy` from `web/`.
+[Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) builds and deploys `main`
+on every push, migration included; GitHub Actions only checks (`ci.yml`). Its build image has no
+Deno, so the build command installs it.
 
 One-time setup:
 
-1. **Repository secrets** (Settings → Secrets and variables → Actions): `CLOUDFLARE_API_TOKEN` (a
-   token with *Edit Cloudflare Workers*), `CLOUDFLARE_ACCOUNT_ID`, `TURSO_DATABASE_URL`,
-   `TURSO_AUTH_TOKEN`.
+1. **Connect the repository**: the `tindone` Worker → Settings → Build → connect `kuboon/tindone`,
+   production branch `main`, and set:
+
+   | Setting        | Value                                                                                         |
+   | -------------- | --------------------------------------------------------------------------------------------- |
+   | Root directory | `web`                                                                                         |
+   | Build command  | `curl -fsSL https://deno.land/install.sh \| sh -s -- -y && $HOME/.deno/bin/deno task build` |
+   | Deploy command | `$HOME/.deno/bin/deno task deploy`                                                            |
+
+   `deno task deploy` runs `deno task db migrate --remote` against the D1 database `tindone` (its
+   id is in `web/wrangler.jsonc` and in the task), then `wrangler deploy` — the migration first,
+   so new code never meets an old schema; if it fails, nothing is deployed. Both use the build's
+   API token (`CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID`, provided by Workers Builds). If the
+   migration is refused for lack of permission, give that token *D1 Edit* under Settings → Build →
+   API token.
 2. **Worker secrets**, from `web/`:
 
    ```sh
    npx wrangler secret put SESSION_SECRET
    npx wrangler secret put RP_SIGNING_KEY_JWK
-   npx wrangler secret put TURSO_DATABASE_URL
-   npx wrangler secret put TURSO_AUTH_TOKEN
    ```
 
 3. **`RP_ORIGIN`**: set it under `vars` in `web/wrangler.jsonc` to the Worker's URL
