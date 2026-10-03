@@ -138,7 +138,7 @@ The old VAPID-based notifications are gone; devices must be registered again.
    ```sh
    cd web
    deno task db migrate             # web/data/app.db, for `deno task dev`
-   deno task db migrate --remote    # the D1 database; deploy.yml does this on every deploy
+   deno task db migrate --remote    # the D1 database; `deno task deploy` does this on every deploy
    ```
 
    `--remote` reads `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_D1_DATABASE_ID`
@@ -168,14 +168,27 @@ The old VAPID-based notifications are gone; devices must be registered again.
 
 ## Deploy (Cloudflare Workers)
 
-`.github/workflows/deploy.yml` deploys `main` on every push: `deno task build`, then
-`deno task db migrate --remote`, then `wrangler deploy` from `web/`.
+[Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) builds and deploys `main`
+on every push, migration included; GitHub Actions only checks (`ci.yml`). Its build image has no
+Deno, so the build command installs it.
 
 One-time setup:
 
-1. **Repository secrets** (Settings → Secrets and variables → Actions): `CLOUDFLARE_API_TOKEN` (a
-   token with *Edit Cloudflare Workers* and *D1 Edit*) and `CLOUDFLARE_ACCOUNT_ID`. The D1
-   database itself (`tindone`) already exists; its id is in `web/wrangler.jsonc`.
+1. **Connect the repository**: the `tindone` Worker → Settings → Build → connect `kuboon/tindone`,
+   production branch `main`, and set:
+
+   | Setting        | Value                                                                                         |
+   | -------------- | --------------------------------------------------------------------------------------------- |
+   | Root directory | `web`                                                                                         |
+   | Build command  | `curl -fsSL https://deno.land/install.sh \| sh -s -- -y && $HOME/.deno/bin/deno task build` |
+   | Deploy command | `$HOME/.deno/bin/deno task deploy`                                                            |
+
+   `deno task deploy` runs `deno task db migrate --remote` against the D1 database `tindone` (its
+   id is in `web/wrangler.jsonc` and in the task), then `wrangler deploy` — the migration first,
+   so new code never meets an old schema; if it fails, nothing is deployed. Both use the build's
+   API token (`CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID`, provided by Workers Builds). If the
+   migration is refused for lack of permission, give that token *D1 Edit* under Settings → Build →
+   API token.
 2. **Worker secrets**, from `web/`:
 
    ```sh

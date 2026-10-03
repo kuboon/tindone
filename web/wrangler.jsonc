@@ -9,14 +9,14 @@
   "assets": {
     "directory": "dist/public"
   },
-  // The database. Migrated by `deno task db migrate --remote` (deploy.yml), not by
-  // `wrangler d1 migrations`: the migrations are data-table's, under db/migrations/.
+  // The database. Migrated by `deno task db migrate --remote` (part of `deno task deploy`, which
+  // Workers Builds runs), not by `wrangler d1 migrations`: the migrations are data-table's, under
+  // db/migrations/. The id is repeated in deno.json's deploy task.
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "tindone",
-      "database_id": "da8be679-c6be-4acb-b6a7-36dbb86b2b61",
-      "migrations_dir": "db/migrations"
+      "database_id": "da8be679-c6be-4acb-b6a7-36dbb86b2b61"
     }
   ],
   // Secrets, set with `wrangler secret put <NAME>`:

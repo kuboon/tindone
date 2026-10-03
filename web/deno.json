@@ -5,6 +5,7 @@
     "start": "deno task --cwd server start",
     "build": "deno task --cwd server build",
     "db": "deno run -A jsr:@remix-kbn/data-table-d1@^0.1.0/cli",
+    "deploy": "deno task db migrate --remote --database-id da8be679-c6be-4acb-b6a7-36dbb86b2b61 && npx --yes wrangler@4 deploy",
     "check": "deno task --members check && deno lint && deno fmt --check",
     "test": "deno task --cwd server test"
   },
