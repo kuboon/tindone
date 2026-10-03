@@ -27,7 +27,15 @@
     "IDP_ORIGIN": "https://id.kbn.one",
     "RP_ORIGIN": "https://gtd.kbn.one"
   },
-  "observability": { "enabled": true },
+  "observability": {
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true
+    },
+    "traces": {
+      "enabled": false
+    }
+  },
   // Worker Previews (`deno task deploy:preview`, the Preview command of Workers Builds) inherit
   // nothing from above. They get their own database, `tindone-preview`, shared by every branch and
   // migrated by that task, so a branch never touches production data. RP_ORIGIN is left unset:
@@ -43,6 +51,14 @@
         "database_id": "e5444ee5-209c-4e0f-8945-6fd986eba690"
       }
     ],
-    "observability": { "enabled": true }
+    "observability": {
+      "logs": {
+        "enabled": true,
+        "invocation_logs": true
+      },
+      "traces": {
+        "enabled": false
+      }
+    }
   }
 }
