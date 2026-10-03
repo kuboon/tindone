@@ -14,7 +14,6 @@
     "jsr:@std/internal@^1.0.12": "1.0.14",
     "jsr:@std/internal@^1.0.14": "1.0.14",
     "jsr:@std/path@^1.1.5": "1.1.6",
-    "npm:@remix-run/cookie@0.7": "0.7.0",
     "npm:@remix-run/data-table@1": "1.0.0",
     "npm:@remix-run/fetch-router@~0.22.1": "0.22.1",
     "npm:@remix-run/render-middleware@~0.3.1": "0.3.1_@emnapi+core@1.11.2_@emnapi+runtime@1.11.2",
@@ -581,12 +580,6 @@
         "oxc-transform",
         "picomatch",
         "source-map-js"
-      ]
-    },
-    "@remix-run/cookie@0.7.0": {
-      "integrity": "sha512-j49KZ4pK7HoLorl3OrS7RHVgKIwf/HPndJSzVGQd2VbbdOq8f//dIYs0nKsZ9CSll5p2r3g7/N2ivxnUDYPBCA==",
-      "dependencies": [
-        "@remix-run/headers"
       ]
     },
     "@remix-run/data-table@1.0.0": {
@@ -1863,7 +1856,6 @@
       "jsr:@remix-kbn/assets-deno@0.8",
       "jsr:@remix-kbn/data-table-d1@0.1",
       "jsr:@std/assert@^1.0.19",
-      "npm:@remix-run/cookie@0.7",
       "npm:@remix-run/data-table@1",
       "npm:@remix-run/fetch-router@~0.22.1",
       "npm:@remix-run/render-middleware@~0.3.1",

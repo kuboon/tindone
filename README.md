@@ -20,7 +20,7 @@ Swipe your way to GTD nirvana.
 - **GTD Lists**: Inbox, Now, Next, Waiting, Done.
 - **Tinder-like Swipe**: process a list as a card deck — drag or use the arrow keys. Right → Now,
   left → Next, down → Waiting, up → Done. An empty deck moves on to the next list
-  (inbox → now → waiting → next → home).
+  (inbox → now → waiting → next → home). Esc goes back home.
 - **Task Log**: every move is recorded; log lines can be deleted.
 - **Remote Update**: copy a curl / wget / `fetch` snippet to add or move tasks from a terminal.
 - **Push Notifications**: a move made through the API notifies your devices.
@@ -39,15 +39,15 @@ web/
   client/            # everything the browser is given — type-checked without deno.ns
     routes.ts        # every URL the app answers
     layout.tsx       # the document shell
-    pages/           # server-rendered screens
+    pages/           # the screens — the same HTML for everyone, prerendered by build.ts
     islands/         # hydrated client components (each file is an entrypoint)
-      _lib/session.ts  # the browser's DPoP key + id.kbn.one session, shared by islands
+      _lib/session.ts  # the browser's DPoP key + id.kbn.one token, and API calls made with them
     static/          # app.css, icons, sw.js, manifest
   server/            # auth, database, push
     app.tsx          # routes → controllers, the same on both hosts
     router.tsx       # development entry: `deno serve router.tsx`, compiles client/ on startup
     worker.ts        # Cloudflare Workers entry
-    build.ts         # `deno task build`: writes dist/ for Wrangler
+    build.ts         # `deno task build`: writes dist/ for Wrangler, every page prerendered
 ```
 
 ### Two hosts, one app
@@ -60,6 +60,7 @@ things that are not code:
 | Environment       | `Deno.env`                               | the Worker's `env` (`wrangler.jsonc` vars + secrets)       |
 | Client bundle     | compiled on startup (`Deno.bundle`)      | prebuilt into `dist/public/assets/` + `dist/manifest.json` |
 | Static files      | served by the router                     | Workers Static Assets (`dist/public/`)                     |
+| Pages             | rendered on each request                 | prerendered into Static Assets                             |
 | Database          | `web/data/app.db` (`createLocalD1`)      | the `DB` D1 binding                                        |
 
 Islands name themselves `file://client/islands/<name>.tsx#<Export>` in `clientEntry()` rather than
@@ -67,20 +68,31 @@ Islands name themselves `file://client/islands/<name>.tsx#<Export>` in `clientEn
 `import.meta.url` and function names are mangled. `server/scripts.ts` resolves those ids on both
 hosts.
 
-## How sign-in works
+## Pages carry no session
+
+The HTML of every page is the same for everyone: nothing in it depends on who asks, so
+`deno task build` renders each one ahead of time into Static Assets, and Cloudflare serves and
+caches it without running the Worker. `/tasks/:taskId` is one shell for every task. The islands
+on a page fetch the user's data from `/api/…` once they are in the browser.
+
+There is no cookie and no session secret. Each API request proves who sent it:
 
 1. The browser creates a DPoP key (`@kuboon/dpop`, kept in IndexedDB) and goes to
    `https://id.kbn.one/authorize?dpop_jkt=<thumbprint>&redirect_uri=<origin>/auth/callback`.
 2. id.kbn.one signs the user in with a passkey and binds its session to that key.
 3. Back on `/auth/callback`, the browser fetches `https://id.kbn.one/session` with a DPoP proof and
-   receives `{ userId, jws }` — a token whose `cnf.jkt` is the key's thumbprint.
-4. It posts the token to `/auth/session` as `Authorization: DPoP <jws>` with a DPoP proof. The
-   server verifies the token against id.kbn.one's JWKS and that the proof's key matches `cnf.jkt`,
-   then sets a signed, HttpOnly session cookie that the pages read.
+   receives `{ userId, jws }` — a token whose `cnf.jkt` is the key's thumbprint. It keeps the token
+   in `localStorage` until shortly before it expires; without the key, which never leaves
+   IndexedDB, the token is useless to anyone else.
+4. Every API call sends `Authorization: DPoP <jws>` with a fresh DPoP proof for that request. The
+   server verifies the token against id.kbn.one's JWKS (fetched once and cached) and that the
+   proof's key matches `cnf.jkt` — two local signature checks, no call to id.kbn.one. The browser
+   asks id.kbn.one again only when the token runs out or is refused.
 
 ## API
 
 Every user has an API token, sent as `Authorization: Bearer <token>`, so scripts need no sign-in.
+The browser calls the same endpoints with its DPoP credential instead (above).
 The token and ready-to-copy snippets are shown on the home and task pages, and the token can be
 regenerated from the home page.
 
@@ -122,10 +134,9 @@ The old VAPID-based notifications are gone; devices must be registered again.
    | Name                                     | Meaning                                                                                                     |
    | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
    | `RP_ORIGIN`                              | Public origin of this app, e.g. `https://tindone.example`. Required for push; also used for absolute URLs.  |
-   | `SESSION_SECRET`                         | Secret(s) signing the session cookie, comma-separated, newest first. A dev default is used when unset.      |
    | `RP_SIGNING_KEY_JWK`                     | ES256 private key (JWK JSON) for client assertions. Generated per process when unset — set it in production. |
    | `DATABASE_FILE`                          | Development only: the SQLite file standing in for D1, default `web/data/app.db`. Workers use the `DB` binding. |
-   | `IDP_ORIGIN`                             | Defaults to `https://id.kbn.one`.                                                                           |
+   | `IDP_ORIGIN`                             | Defaults to `https://id.kbn.one`. Read at build time too — the prerendered pages name it.                   |
 
    Generate a signing key with:
 
@@ -157,7 +168,7 @@ The old VAPID-based notifications are gone; devices must be registered again.
    deno task dev     # http://localhost:8000, with --watch
    deno task check   # type-check, lint, format-check
    deno task test
-   deno task build   # dist/ for Workers — compiles the client and bundles the Worker (no crawl)
+   deno task build   # dist/ for Workers — compiles the client, bundles the Worker, prerenders pages
    npx wrangler dev  # run dist/ locally in workerd; put variables in web/.dev.vars
    ```
 
@@ -197,18 +208,14 @@ One-time setup:
    block of `web/wrangler.jsonc`, not from production: their `DB` is `tindone-preview`, shared by
    every branch. When two branches' migrations collide there, rebuild it from the branch you are
    testing: `deno task db reset --force --remote --database-id e5444ee5-209c-4e0f-8945-6fd986eba690`.
-2. **Worker secrets**, from `web/` — production, and the Previews base config that every new
-   Preview starts with:
+2. **Worker secret**, from `web/` — the key push notifications are requested with:
 
    ```sh
-   npx wrangler secret put SESSION_SECRET
    npx wrangler secret put RP_SIGNING_KEY_JWK
-   npx wrangler preview base-config secret put SESSION_SECRET
-   npx wrangler preview base-config secret put RP_SIGNING_KEY_JWK
    ```
 
-   Signing in on a Preview needs its origin on id.kbn.one's `AUTHORIZE_WHITELIST`, and push needs
-   `RP_ORIGIN`, which Previews leave unset.
+   Previews need no secret: push, the one thing it is for, needs `RP_ORIGIN`, which Previews leave
+   unset. Signing in on a Preview needs its origin on id.kbn.one's `AUTHORIZE_WHITELIST`.
 
 3. **`RP_ORIGIN`**: set it under `vars` in `web/wrangler.jsonc` to the Worker's URL
    (`https://tindone.<subdomain>.workers.dev` or a custom domain), and add the same origin to

@@ -16,6 +16,10 @@ old one.
 
 A missing or unknown token is answered with `401 Unauthorized` and `WWW-Authenticate: Bearer`.
 
+The app's own pages call the same endpoints without the API token: they send id.kbn.one's token as
+`Authorization: DPoP <token>` with a DPoP proof instead. Scripts have no use for that — the API token
+is the simple way in.
+
 All endpoints live under `https://gtd.kbn.one/api` and allow cross-origin requests, so `fetch` from
 a browser page on another origin works too.
 
@@ -73,6 +77,51 @@ first. Times are Unix milliseconds.
 ```sh
 curl https://gtd.kbn.one/api/inbox -H "Authorization: Bearer <token>"
 ```
+
+## List every task
+
+```http
+GET /api/tasks
+```
+
+Every task you have, in every list, oldest first. The response is shaped like
+[List tasks](#list-tasks).
+
+```sh
+curl https://gtd.kbn.one/api/tasks -H "Authorization: Bearer <token>"
+```
+
+## Get a task
+
+```http
+GET /api/tasks/:taskId
+```
+
+One task and its history. Like the task page, this answers to anyone with the id; the token is
+optional and only decides `owner`.
+
+**Response** `200`
+
+```json
+{
+  "task": {
+    "id": "s_oJakMbNZbie87G2g1RWg",
+    "content": "buy milk",
+    "list": "now"
+  },
+  "logs": [
+    {
+      "id": "Q2vV7nX0aKq9rLwM1bYz3w",
+      "from_list": "inbox",
+      "to_list": "now",
+      "created_at": 1790200400000
+    }
+  ],
+  "owner": true
+}
+```
+
+`logs` are newest first; the line that created the task has `from_list: null`.
 
 ## Add a task
 
@@ -162,3 +211,13 @@ Removes one line from a task's history. The task itself is not changed.
 ```json
 { "success": true }
 ```
+
+## API token
+
+```http
+GET /api/me
+POST /api/me/token
+```
+
+`GET` answers `{ "apiToken": "…" }` — the token the request was made with, or, from the app's own
+pages, the user's. `POST` replaces it and answers the new one; the old one stops working at once.

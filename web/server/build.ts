@@ -1,7 +1,7 @@
 /**
  * The production build: everything Cloudflare Workers needs, in `dist/`.
  *
- * Nothing is crawled — the app is served live — so a build is three things:
+ * A build is five things:
  *
  * 1. **The client**, compiled exactly as `deno serve` compiles it (`compile.ts`), with every
  *    emitted module written under `dist/public/assets/` and each entrypoint's URL and preloads
@@ -12,17 +12,26 @@
  *    renders the result.
  * 4. **`dist/index.js`**, the module Wrangler deploys, handing the manifest and docs to the
  *    bundled app.
+ * 5. **Every page**, rendered once by the same app and written to `dist/public/` as HTML. A page
+ *    is the same for everyone — the islands fetch the user's data — so Static Assets serves it,
+ *    cached at the edge, without running the Worker. `/tasks/:taskId` is one shell for every id
+ *    (`TASK_SHELL`, answered by `worker.ts`).
  *
  * `dist/public/` is the Worker's Static Assets directory (`wrangler.jsonc`).
  */
 
+import { createApp } from "./app.tsx";
 import { clientDir, compileClient } from "./compile.ts";
 import { loadDocs } from "./docs.ts";
 import {
   ISLAND_ENTRIES,
   RUNTIME_ENTRY,
   type ScriptManifest,
+  scriptsFromManifest,
 } from "./scripts.ts";
+import { TASK_SHELL } from "./worker.ts";
+import { SWIPE_LISTS } from "../client/lists.ts";
+import { routes } from "../client/routes.ts";
 
 const dist = new URL("../dist/", import.meta.url);
 const pub = new URL("public/", dist);
@@ -120,6 +129,26 @@ export default createWorker(manifest, docs);
 `,
 );
 console.log("entry: dist/index.js");
+
+// 5. The pages. `/done` is written as `done.html`, which Static Assets serves for `/done`.
+const app = createApp(scriptsFromManifest(manifest), { docs });
+const pages = [
+  routes.home.href(),
+  routes.done.href(),
+  ...SWIPE_LISTS.map((list) => routes.swipe.href({ list })),
+  routes.auth.callback.href(),
+  TASK_SHELL,
+  ...Object.keys(docs).map((slug) => routes.doc.href({ slug })),
+];
+for (const path of pages) {
+  const response = await app.fetch(new Request(`http://build${path}`));
+  if (!response.ok) throw new Error(`${path}: ${response.status}`);
+  await write(
+    new URL(path === "/" ? "index.html" : `.${path}.html`, pub),
+    await response.text(),
+  );
+}
+console.log(`pages: ${pages.join(" ")}`);
 
 // `deno run` would otherwise wait on the asset server's bundler.
 Deno.exit(0);

@@ -1,20 +1,18 @@
 import { css, type Handle } from "@remix-run/ui";
 
 import type { ListName } from "../lists.ts";
-import { type DeckTask, SwipeDeck } from "../islands/swipe_deck.tsx";
+import { SwipeDeck } from "../islands/swipe_deck.tsx";
 
 export interface SwipeProps {
-  tasks: DeckTask[];
   list: ListName;
-  from: ListName | null;
-  token: string;
+  idpOrigin: string;
 }
 
-/** `/swipe/:list` — one list as a full-screen card deck. */
+/** `/swipe/:list` — one list as a full-screen card deck. The deck fetches its own cards. */
 export function Swipe(handle: Handle<SwipeProps>) {
   return () => (
     <main mix={mainStyle}>
-      <SwipeDeck {...handle.props} />
+      <SwipeDeck list={handle.props.list} idpOrigin={handle.props.idpOrigin} />
     </main>
   );
 }
